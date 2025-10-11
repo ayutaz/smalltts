@@ -162,6 +162,44 @@ from-scratch training order, in `scripts/train`:
 - we have tested [webdataset](https://github.com/webdataset/webdataset)
 - checkpoints on huggingface make fine‑tuning easy
 
+### japanese fine-tuning
+
+smalltts supports **multilingual phonemes** (205 tokens: english ~175 + japanese ~64) with automatic language detection.
+
+**quick start**:
+```bash
+# 1. expand checkpoint for multilingual support (175→205 tokens)
+python scripts/utils/expand_checkpoint.py \
+  --input assets/teacher_checkpoints/checkpoint_latest.pt \
+  --output assets/teacher_checkpoints/checkpoint_multilingual.pt \
+  --old-vocab-size 175 \
+  --new-vocab-size 205
+
+# 2. fine-tune on JVS dataset (configure paths in script)
+uv run accelerate launch scripts/train/teacher_japanese.py
+```
+
+**features**:
+- automatic phoneme embedding expansion
+- JVS (Japanese Versatile Speech corpus) dataloader included
+- fine-tuning optimized parameters (lr: 1e-5, 50k steps)
+- preserves english knowledge while learning japanese
+
+**details**: see `docs/training_japanese.md` for full guide
+
+**usage example**:
+```python
+from smalltts import SmallTTS
+from smalltts.data.phonemization.phonemes import set_language
+
+# multilingual mode (auto language detection)
+set_language("multilingual")
+
+tts = SmallTTS()
+# japanese text - automatically detected
+# english text - automatically detected
+```
+
 ## inference
 
 use onnx exports for production inference, download from huggingface, see `infer/` for examples

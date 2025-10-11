@@ -53,7 +53,11 @@
 ### データ (src/smalltts/data/)
 
 - **dummy.py**: ダミーデータローダー（訓練には実データに置き換える必要あり）
+- **japanese.py**: JVS (Japanese Versatile Speech corpus) データローダー
 - **phonemization/**: テキスト正規化と音素トークン化
+  - **phonemes.py**: 多言語音素化システム（英語・日本語対応）
+  - **normalizer.py**: 英語テキスト正規化
+  - **normalizer_ja.py**: 日本語テキスト正規化
 
 ## 訓練パイプライン
 
@@ -181,6 +185,88 @@ uv pip install "git+https://github.com/smallbraineng/smalltts"
   - 対応する転写テキスト
   - 音素化されたテキスト
 - プロジェクトはWebDataset形式でテスト済み
+
+## 日本語対応
+
+SmallTTSは多言語音素語彙（205トークン）により、英語と日本語の両方をサポートします。
+
+### 音素化システム
+
+**多言語モード（デフォルト）**:
+- 英語音素（~175トークン）+ 日本語音素（~64トークン）= 205トークン
+- 自動言語検出（Unicode範囲による判定）
+- pyopenjtalk-plusによる日本語音素化
+- espeak-ngによる英語音素化
+
+```python
+from smalltts.data.phonemization.phonemes import set_language, get_token_ids
+
+# 多言語モード（デフォルト、自動言語検出）
+set_language("multilingual")
+
+# 日本語テキスト - 自動検出
+tokens_ja = get_token_ids("こんにちは、世界！")
+
+# 英語テキスト - 自動検出
+tokens_en = get_token_ids("Hello, world!")
+```
+
+**言語モードの切り替え**:
+```python
+# 英語のみ (175トークン)
+set_language("en")
+
+# 日本語のみ (64トークン)
+set_language("ja")
+
+# 多言語 (205トークン) - デフォルト
+set_language("multilingual")
+```
+
+### 日本語データセット
+
+**JVS (Japanese Versatile Speech corpus)**:
+- 30時間、100話者
+- 24kHz、高品質
+- データローダー: `src/smalltts/data/japanese.py`
+
+```python
+from smalltts.data.japanese import get_jvs_dataloader
+
+loader = get_jvs_dataloader(
+    audio_dir="data/jvs_ver1/jvs001/parallel100/wav24kHz16bit",
+    transcript_file="data/jvs_ver1/jvs001/parallel100/transcripts_utf8.txt",
+    batch_size=16,
+    num_workers=4
+)
+```
+
+### 日本語ファインチューニング
+
+既存の英語Teacherモデルを日本語データでファインチューニングできます:
+
+**1. チェックポイントの音素埋め込み拡張**:
+```bash
+# 既存チェックポイント（175トークン）を多言語（205トークン）に拡張
+python scripts/utils/expand_checkpoint.py \
+  --input assets/teacher_checkpoints/checkpoint_latest.pt \
+  --output assets/teacher_checkpoints/checkpoint_multilingual.pt \
+  --old-vocab-size 175 \
+  --new-vocab-size 205
+```
+
+**2. JVSデータセットでファインチューニング**:
+```bash
+# scripts/train/teacher_japanese.py でデータセットパスを設定後
+uv run accelerate launch scripts/train/teacher_japanese.py
+```
+
+**特徴**:
+- 自動的な音素埋め込み拡張（175→205トークン）
+- ファインチューニング最適化済みパラメータ（学習率: 1e-5）
+- 既存の英語知識を保持しながら日本語を学習
+
+**詳細ガイド**: `docs/training_japanese.md`を参照
 
 ## ライセンス
 
