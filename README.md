@@ -58,6 +58,68 @@ uv run python scripts/infer/clone.py \
   --text "what you want it to say"
 ```
 
+## using docker compose
+
+docker compose simplifies the workflow with minimal commands. volume mounting automatically syncs output files to `./out/`.
+
+### initial setup
+
+```bash
+# build and start (automatically builds the image)
+docker-compose up -d
+
+# download assets (first time only, ~1-2GB)
+docker-compose exec smalltts uv run python -m smalltts.assets.ensure tryme codec e2e length
+```
+
+### running inference
+
+```bash
+# generate audio (output automatically saved to ./out/tryme.wav)
+docker-compose exec smalltts uv run python scripts/tryme.py "Hello from smallTTS!"
+```
+
+### using gpu version
+
+```bash
+# start gpu service
+docker-compose up -d smalltts-gpu
+
+# download assets
+docker-compose exec smalltts-gpu uv run python -m smalltts.assets.ensure tryme codec e2e length
+
+# run inference
+docker-compose exec smalltts-gpu uv run python scripts/tryme.py "Hello from smallTTS!"
+```
+
+### other inference scripts
+
+```bash
+# interactive mode
+docker-compose exec smalltts uv run python scripts/infer/interactive.py
+
+# voice cloning
+docker-compose exec smalltts uv run python scripts/infer/clone.py \
+  --wav assets/test_audio/1.wav \
+  --transcription "reference audio transcription" \
+  --text "text to generate"
+
+# batch inference
+docker-compose exec smalltts uv run python scripts/infer/batch.py
+```
+
+### cleanup
+
+```bash
+# stop and remove containers
+docker-compose down
+```
+
+**note for windows**: if volume mounting doesn't work correctly, use `docker cp` to extract files:
+```bash
+docker cp smalltts:/app/out/tryme.wav ./out/tryme.wav
+```
+
 ## benchmarks
 
 | hardware | batch | RTF | runtime |

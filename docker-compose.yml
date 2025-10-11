@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  # CPU version - lightweight and fast startup
+  smalltts:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: smalltts
+    volumes:
+      - ./assets:/app/assets
+      - ./out:/app/out
+    command: sleep infinity
+
+  # GPU version - CUDA-enabled for faster inference
+  smalltts-gpu:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    container_name: smalltts-gpu
+    volumes:
+      - ./assets:/app/assets
+      - ./out:/app/out
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    command: sleep infinity
