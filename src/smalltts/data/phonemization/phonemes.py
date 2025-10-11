@@ -6,6 +6,7 @@ from phonemizer.backend import EspeakBackend
 from phonemizer.logger import get_logger
 
 from .normalizer import EnglishTextNormalizer
+from .normalizer_ja import JapaneseTextNormalizer
 
 try:
     import pyopenjtalk
@@ -81,6 +82,7 @@ logging.getLogger().setLevel(logging.CRITICAL)
 _es = None
 _tok = re.compile(r"\w+|[^\w\s]")
 normalizer = EnglishTextNormalizer()
+normalizer_ja = JapaneseTextNormalizer(convert_numbers=False)
 
 
 def _get_espeak_backend():
@@ -101,6 +103,9 @@ def _phonemize_ja(text: str) -> str:
     """Phonemize Japanese text using pyopenjtalk"""
     if not _PYOPENJTALK_AVAILABLE:
         raise RuntimeError("pyopenjtalk-plus is not installed. Please install it to use Japanese phonemization.")
+
+    # Normalize text first (full-width to half-width, symbol normalization)
+    text = normalizer_ja.normalize(text)
 
     # Use pyopenjtalk to convert text to phonemes
     phonemized = pyopenjtalk.g2p(text, kana=False)
