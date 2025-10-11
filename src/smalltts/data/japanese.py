@@ -1,20 +1,8 @@
-"""Japanese dataset loader for JSUT and JVS corpora
+"""Japanese dataset loader for JVS corpus
 
-Supports:
-- JSUT (Japanese speech corpus of Saruwatari-lab., University of Tokyo)
-- JVS (Japanese versatile speech corpus)
-- Custom Japanese datasets with similar structure
+Supports JVS (Japanese versatile speech corpus) format.
 
 Expected directory structure:
-
-JSUT:
-    dataset_root/
-        basic5000/
-            wav/
-                BASIC5000_0001.wav
-                BASIC5000_0002.wav
-                ...
-            transcript_utf8.txt
 
 JVS:
     dataset_root/
@@ -22,8 +10,20 @@ JVS:
             parallel100/
                 wav24kHz16bit/
                     VOICEACTRESS100_001.wav
+                    VOICEACTRESS100_002.wav
                     ...
                 transcripts_utf8.txt
+        jvs002/
+            parallel100/
+                wav24kHz16bit/
+                    VOICEACTRESS100_001.wav
+                    ...
+                transcripts_utf8.txt
+        ...
+
+Transcript format:
+    VOICEACTRESS100_001:それは確かにそうです。
+    VOICEACTRESS100_002:今日はいい天気ですね。
 """
 
 import logging
@@ -40,12 +40,12 @@ from .phonemization.phonemes import get_token_ids
 logger = logging.getLogger(__name__)
 
 
-class JapaneseAudioDataset(Dataset):
-    """Dataset for Japanese speech with text transcriptions
+class JVSDataset(Dataset):
+    """Dataset for JVS (Japanese versatile speech corpus)
 
     Args:
-        audio_dir: Directory containing audio files
-        transcript_file: Path to transcript file (format: "filename|text" per line)
+        audio_dir: Directory containing audio files (e.g., wav24kHz16bit/)
+        transcript_file: Path to transcript file (format: "filename:text" per line)
         codec_encoder: Optional VibeVoice encoder for converting audio to latents
         target_sample_rate: Target sample rate (default: 24000 Hz)
         max_audio_length_sec: Maximum audio length in seconds (default: 30)
@@ -73,17 +73,17 @@ class JapaneseAudioDataset(Dataset):
         self.metadata = self._load_metadata()
 
         logger.info(
-            f"Loaded Japanese dataset: {len(self.metadata)} samples from {audio_dir}"
+            f"Loaded JVS dataset: {len(self.metadata)} samples from {audio_dir}"
         )
 
     def _load_metadata(self) -> List[Tuple[str, str]]:
-        """Load metadata from transcript file
+        """Load metadata from JVS transcript file
 
-        Supports multiple formats:
-        - "filename|text" (JSUT format)
-        - "filename text" (space-separated)
+        JVS format: "filename:text" (colon-separated)
+        Also supports alternative formats for compatibility:
+        - "filename|text" (pipe-separated)
         - "filename\ttext" (tab-separated)
-        - "filename:text" (colon-separated)
+        - "filename text" (space-separated)
 
         Returns:
             List of (audio_filename, text) tuples
@@ -101,8 +101,8 @@ class JapaneseAudioDataset(Dataset):
                 if not line or line.startswith("#"):
                     continue
 
-                # Try different separators
-                for separator in ["|", "\t", ":", " "]:
+                # Try different separators (JVS uses colon by default)
+                for separator in [":", "|", "\t", " "]:
                     if separator in line:
                         parts = line.split(separator, 1)
                         if len(parts) == 2:
@@ -188,11 +188,11 @@ class JapaneseAudioDataset(Dataset):
         }
 
 
-def japanese_collate_fn(batch: List[Dict]) -> Dict:
-    """Collate function for Japanese audio dataset
+def jvs_collate_fn(batch: List[Dict]) -> Dict:
+    """Collate function for JVS dataset
 
     Args:
-        batch: List of samples from JapaneseAudioDataset
+        batch: List of samples from JVSDataset
 
     Returns:
         Dictionary with batched and padded tensors
@@ -220,7 +220,7 @@ def japanese_collate_fn(batch: List[Dict]) -> Dict:
     }
 
 
-def get_japanese_dataloader(
+def get_jvs_dataloader(
     audio_dir: str,
     transcript_file: str,
     codec_encoder=None,
@@ -231,11 +231,11 @@ def get_japanese_dataloader(
     max_audio_length_sec: float = 30.0,
     **kwargs,
 ) -> DataLoader:
-    """Create DataLoader for Japanese audio dataset
+    """Create DataLoader for JVS (Japanese versatile speech corpus)
 
     Args:
-        audio_dir: Directory containing audio files
-        transcript_file: Path to transcript file
+        audio_dir: Directory containing audio files (e.g., wav24kHz16bit/)
+        transcript_file: Path to transcript file (transcripts_utf8.txt)
         codec_encoder: Optional VibeVoice encoder for converting audio to latents
         batch_size: Batch size
         num_workers: Number of worker processes for data loading
@@ -248,21 +248,25 @@ def get_japanese_dataloader(
         DataLoader instance
 
     Example:
-        >>> # For JSUT dataset
-        >>> loader = get_japanese_dataloader(
-        ...     audio_dir="data/jsut/basic5000/wav",
-        ...     transcript_file="data/jsut/basic5000/transcript_utf8.txt",
-        ...     batch_size=16
+        >>> # Load JVS dataset (single speaker)
+        >>> loader = get_jvs_dataloader(
+        ...     audio_dir="data/jvs_ver1/jvs001/parallel100/wav24kHz16bit",
+        ...     transcript_file="data/jvs_ver1/jvs001/parallel100/transcripts_utf8.txt",
+        ...     batch_size=16,
+        ...     num_workers=4
         ... )
         >>>
-        >>> # For JVS dataset
-        >>> loader = get_japanese_dataloader(
-        ...     audio_dir="data/jvs/jvs001/parallel100/wav24kHz16bit",
-        ...     transcript_file="data/jvs/jvs001/parallel100/transcripts_utf8.txt",
+        >>> # Load with codec encoder for latent conversion
+        >>> from smalltts.codec import VibeVoiceEncoder
+        >>> encoder = VibeVoiceEncoder()
+        >>> loader = get_jvs_dataloader(
+        ...     audio_dir="data/jvs_ver1/jvs001/parallel100/wav24kHz16bit",
+        ...     transcript_file="data/jvs_ver1/jvs001/parallel100/transcripts_utf8.txt",
+        ...     codec_encoder=encoder,
         ...     batch_size=16
         ... )
     """
-    dataset = JapaneseAudioDataset(
+    dataset = JVSDataset(
         audio_dir=audio_dir,
         transcript_file=transcript_file,
         codec_encoder=codec_encoder,
@@ -275,7 +279,7 @@ def get_japanese_dataloader(
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=num_workers,
-        collate_fn=japanese_collate_fn,
+        collate_fn=jvs_collate_fn,
         pin_memory=True,
         **kwargs,
     )
@@ -286,21 +290,34 @@ def get_japanese_dataloader(
 if __name__ == "__main__":
     # Example usage / testing
     print("=" * 80)
-    print("JAPANESE DATASET LOADER TEST")
+    print("JVS DATASET LOADER TEST")
     print("=" * 80)
 
     # This is a minimal test that demonstrates the API
-    # For actual testing, you would need a real dataset
+    # For actual testing, you would need a real JVS dataset
 
-    print("\nExpected dataset structure:")
-    print("  audio_dir/")
-    print("    *.wav files")
-    print("  transcript_file.txt")
-    print("    filename|transcription text")
-    print("\nSupported transcript formats:")
+    print("\nExpected JVS dataset structure:")
+    print("  jvs_ver1/")
+    print("    jvs001/")
+    print("      parallel100/")
+    print("        wav24kHz16bit/")
+    print("          VOICEACTRESS100_001.wav")
+    print("          VOICEACTRESS100_002.wav")
+    print("          ...")
+    print("        transcripts_utf8.txt")
+    print("    jvs002/")
+    print("      parallel100/")
+    print("        ...")
+
+    print("\nJVS transcript format:")
+    print("  VOICEACTRESS100_001:それは確かにそうです。")
+    print("  VOICEACTRESS100_002:今日はいい天気ですね。")
+    print("  ...")
+
+    print("\nSupported alternative formats:")
+    print("  - filename:text (colon-separated, JVS default)")
     print("  - filename|text (pipe-separated)")
     print("  - filename\\ttext (tab-separated)")
-    print("  - filename:text (colon-separated)")
     print("  - filename text (space-separated)")
 
     print("\n" + "=" * 80)
@@ -308,10 +325,10 @@ if __name__ == "__main__":
     print("=" * 80)
 
     print("""
-# JSUT dataset
-loader = get_japanese_dataloader(
-    audio_dir="data/jsut/basic5000/wav",
-    transcript_file="data/jsut/basic5000/transcript_utf8.txt",
+# Load JVS dataset (single speaker)
+loader = get_jvs_dataloader(
+    audio_dir="data/jvs_ver1/jvs001/parallel100/wav24kHz16bit",
+    transcript_file="data/jvs_ver1/jvs001/parallel100/transcripts_utf8.txt",
     batch_size=16,
     num_workers=4
 )
@@ -321,8 +338,18 @@ for batch in loader:
     phonemes = batch["phonemes"]  # [batch, max_phoneme_len]
     latents = batch["latents"]  # [batch, max_latent_len, latent_dim]
     break
+
+# Load with codec encoder for latent conversion
+from smalltts.codec import VibeVoiceEncoder
+encoder = VibeVoiceEncoder()
+loader = get_jvs_dataloader(
+    audio_dir="data/jvs_ver1/jvs001/parallel100/wav24kHz16bit",
+    transcript_file="data/jvs_ver1/jvs001/parallel100/transcripts_utf8.txt",
+    codec_encoder=encoder,
+    batch_size=16
+)
 """)
 
     print("=" * 80)
-    print("[INFO] Japanese dataset loader ready for use")
+    print("[INFO] JVS dataset loader ready for use")
     print("=" * 80)
