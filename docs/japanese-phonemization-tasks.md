@@ -356,45 +356,78 @@ if __name__ == "__main__":
 
 ## フェーズ3: 統合とドキュメント（優先度: 中）
 
-### タスク7: ドキュメント更新
-**ステータス**: ⬜ 未着手
+### タスク7: ドキュメント更新と実装
+**ステータス**: 🔄 進行中 (開始: 2025-10-11)
 
 **変更ファイル**:
-- `CLAUDE.md`
-- `README.md`
-- `docs/training_japanese.md`（新規）
+- `CLAUDE.md` ⬜
+- `README.md` ⬜
+- `docs/training_japanese.md` ✅
+
+**新規ファイル**:
+- `scripts/utils/expand_checkpoint.py` ✅
+- `scripts/train/teacher_japanese.py` ✅
 
 **実装内容**:
 
-1. **CLAUDE.md**に日本語対応の情報を追加:
+1. **チェックポイント拡張ユーティリティ** ✅:
+   - 既存チェックポイントの音素埋め込みを175→205トークンに拡張
+   - コマンドラインツール: `scripts/utils/expand_checkpoint.py`
+   - 使用例:
+     ```bash
+     python scripts/utils/expand_checkpoint.py \
+       --input assets/teacher_checkpoints/checkpoint_latest.pt \
+       --output assets/teacher_checkpoints/checkpoint_multilingual.pt \
+       --old-vocab-size 175 \
+       --new-vocab-size 205
+     ```
+
+2. **日本語ファインチューニングスクリプト** ✅:
+   - JVSデータセット対応のトレーニングスクリプト
+   - 既存英語モデルからのファインチューニング
+   - 自動的な音素埋め込み拡張
+   - ファイル: `scripts/train/teacher_japanese.py`
+   - 使用例:
+     ```bash
+     # データセットパスを設定後
+     uv run accelerate launch scripts/train/teacher_japanese.py
+     ```
+
+3. **詳細トレーニングガイド** ✅:
+   - ファイル: `docs/training_japanese.md`
+   - 内容:
+     - JVSデータセットの準備方法
+     - ファインチューニングの詳細手順
+     - ハイパーパラメータの推奨値
+     - トラブルシューティングガイド
+     - DMD2蒸留への拡張ガイド
+
+4. **CLAUDE.md**に日本語対応の情報を追加 ⬜:
    - 音素化システムの説明
    - 言語切り替え方法
    - データフォーマット
+   - ファインチューニング手順の概要
 
-2. **README.md**に使用例を追加:
+5. **README.md**に使用例を追加 ⬜:
    ```python
-   # 日本語で推論
+   # 日本語で推論（多言語モード）
    from smalltts import SmallTTS
-   from smalltts.data.phonemization import phonemes
+   from smalltts.data.phonemization.phonemes import set_language
 
-   # 言語を日本語に設定
-   phonemes.LANGUAGE = "ja"
+   # 多言語モードに設定（自動言語検出）
+   set_language("multilingual")
 
    tts = SmallTTS()
-   # ... 以下同様
+   # 日本語テキストは自動的に検出される
    ```
 
-3. **docs/training_japanese.md**（新規作成）:
-   - 日本語データセットの準備方法
-   - ファインチューニングの手順
-   - ハイパーパラメータの推奨値
-   - トラブルシューティング
-
 **チェックリスト**:
+- [x] チェックポイント拡張スクリプトの作成
+- [x] teacher_japanese.py トレーニングスクリプトの作成
+- [x] training_japanese.md の作成
 - [ ] CLAUDE.mdの更新
 - [ ] README.mdに使用例を追加
-- [ ] training_japanese.mdの作成
-- [ ] サンプルコードの動作確認
+- [ ] サンプルコードの動作確認（Docker環境）
 
 ---
 
