@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.10.12"
 resolution-markers = [
     "python_full_version >= '3.12'",
@@ -960,6 +960,50 @@ wheels = [
 ]
 
 [[package]]
+name = "pyopenjtalk-plus"
+version = "0.4.1.post4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "sudachidict-core" },
+    { name = "sudachipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/69/8b/f33d8bcddb0f7bf31962c89ef30dd2dad56a620240ea9d1872f425f71901/pyopenjtalk_plus-0.4.1.post4.tar.gz", hash = "sha256:b9b289b85a15a806d1e083384e351924465500b0b3d3389e7e5cacc74b0cc9a3", size = 24952503, upload-time = "2025-09-21T15:34:30.349Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c1/a8/bdbf99bb35a6338fb6fa34376bc1697e71143b02d3b1c138d9296606bfac/pyopenjtalk_plus-0.4.1.post4-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:a4ab4cacb8472c2a97b43c3bd8653c8aa51ffcffd7cc05d9eaf7810b23e40cde", size = 24878862, upload-time = "2025-09-21T15:32:47.289Z" },
+    { url = "https://files.pythonhosted.org/packages/16/08/ee53ee8db8facae34193cf33b49cfa01d504663815bdc04cadaab4c9449c/pyopenjtalk_plus-0.4.1.post4-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:faeb4848092afba93b327f5d0c25b4057213aba33b38c76a5c3d031cf65ab438", size = 24852590, upload-time = "2025-09-21T15:32:50.626Z" },
+    { url = "https://files.pythonhosted.org/packages/05/fe/3fe7acc83559cca3115cf15285c0fc1d91ac413b30c2575ac0a68507005f/pyopenjtalk_plus-0.4.1.post4-cp310-cp310-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:a212d187fb20c365e2eb8c33c5119ed966ee9177bc3c69db4a1234bb304dcaa6", size = 30710947, upload-time = "2025-09-21T15:32:53.6Z" },
+    { url = "https://files.pythonhosted.org/packages/9b/a4/3dda018c4cf921d671162551f9cbf746fa3e10f59a0f89ecbd988d07887b/pyopenjtalk_plus-0.4.1.post4-cp310-cp310-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:65a412ee79375888d61068009c0878d0d8ee6f7ace3025cbe789669c35dbe9e1", size = 30777398, upload-time = "2025-09-21T15:32:56.525Z" },
+    { url = "https://files.pythonhosted.org/packages/84/b3/7285c8a9b64ac4f0aef9998c4bf9e98cf9c04dd6dbfec37eef232677f8dd/pyopenjtalk_plus-0.4.1.post4-cp310-cp310-win_amd64.whl", hash = "sha256:a5803553088f4b99c89f3169c72ded5686d17fbd519a6f1f7ec93df3b3b1b719", size = 24755315, upload-time = "2025-09-21T15:32:59.723Z" },
+    { url = "https://files.pythonhosted.org/packages/cf/8c/91c50f228a701a0651944cd302cf79a7acc4019da70d0834dd00409b69d6/pyopenjtalk_plus-0.4.1.post4-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:b393df8db2a10b0b97a3528c9a8d2f94ae97a97bda02d50bf4698d2d4654dc91", size = 24880046, upload-time = "2025-09-21T15:33:02.687Z" },
+    { url = "https://files.pythonhosted.org/packages/df/bf/a8a057ede0c25d1a16481b59026b82b5aa69d68a30bb14fe27ed92a0304d/pyopenjtalk_plus-0.4.1.post4-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:5f3661094184a89555c31d365cc98d8344825b673f2090ab6cb57d4c492a433a", size = 24853685, upload-time = "2025-09-21T15:33:05.283Z" },
+    { url = "https://files.pythonhosted.org/packages/b3/5b/2bf2e001aeb0f388db827dd4e7d756246a61b73d23dda179658cf40fb796/pyopenjtalk_plus-0.4.1.post4-cp311-cp311-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:5dfaeaf21797e7ce702f375a90283c4f8658cdbb7cf7ebde3b9455a64517471d", size = 30786405, upload-time = "2025-09-21T15:33:09.187Z" },
+    { url = "https://files.pythonhosted.org/packages/05/8e/0b057f024707e74cd114d9cfac710f6a6a0e82fb40670c45953c3eb7d653/pyopenjtalk_plus-0.4.1.post4-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:98e59afa57a960ea697c46d29a32f6748557289bc970507b21bd923a6ebdec5c", size = 30851231, upload-time = "2025-09-21T15:33:12.02Z" },
+    { url = "https://files.pythonhosted.org/packages/fa/bc/93583342fcdef775f9cb561764daf2f5621d78432ca49b7b8cdef8ced60b/pyopenjtalk_plus-0.4.1.post4-cp311-cp311-win_amd64.whl", hash = "sha256:ec7832d62656502cb9cf02235247bf61c2e86b67fb9433cb1d107b109d760240", size = 24755704, upload-time = "2025-09-21T15:33:14.979Z" },
+    { url = "https://files.pythonhosted.org/packages/53/3b/cf87d3b029e5b57bef8731ab7a1913e1d12a89234111b0e3a876ca74b9c1/pyopenjtalk_plus-0.4.1.post4-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:77903f1575de37c5dfad13910775d2f0064714bcdf69f37c8d20f5d13fb257bc", size = 24882900, upload-time = "2025-09-21T15:33:18.023Z" },
+    { url = "https://files.pythonhosted.org/packages/63/0e/240fc4cfeba2761c6a2a9835e4570af983f2faf827fc2171817f1cb01207/pyopenjtalk_plus-0.4.1.post4-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:19660e2d353a930ad79884544eb8fbce5c52aa9c43f88fc744dbcfa69654fb1a", size = 24854967, upload-time = "2025-09-21T15:33:20.57Z" },
+    { url = "https://files.pythonhosted.org/packages/db/e0/7977a5a1987c50a2eb22dc9d534900d6278f3f2d6066ea58705a49785783/pyopenjtalk_plus-0.4.1.post4-cp312-cp312-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:64ca9beed720b1958c5356af91a70b0d23f84005f3ce023a09d18ab95db5b774", size = 30763144, upload-time = "2025-09-21T15:33:23.744Z" },
+    { url = "https://files.pythonhosted.org/packages/f9/2b/9fd53932855e356f38c099b6e4836eb6cbfe12ccbf8ed633ac5b119aca15/pyopenjtalk_plus-0.4.1.post4-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:308d79de15ac06c00b517677e152f2862e69c93950e3003560b9829e5798b2a6", size = 30843559, upload-time = "2025-09-21T15:33:26.961Z" },
+    { url = "https://files.pythonhosted.org/packages/17/4a/bca8e9ad621b8fda5c88b26643a28851e7f3bacbafb5224405a0f38c5b5e/pyopenjtalk_plus-0.4.1.post4-cp312-cp312-win_amd64.whl", hash = "sha256:d75d9e08b7ade3b7cfff6409e87f0c0980850cfb6ab2be99922dd0c8a3d1e95d", size = 24757768, upload-time = "2025-09-21T15:33:30.327Z" },
+    { url = "https://files.pythonhosted.org/packages/51/70/7a44b1cf40ae07864854f1cf79dd8eafd5cc966ec14ae14a05f0c0dcb111/pyopenjtalk_plus-0.4.1.post4-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:183035f007c49071ace8f013ea0961af7f91be4b02aa31549065bc8512327c40", size = 24880952, upload-time = "2025-09-21T15:33:32.852Z" },
+    { url = "https://files.pythonhosted.org/packages/3b/56/12317af24ed1b62721456704c7cfc0fee74eca2fd38e2a0231c4c8832655/pyopenjtalk_plus-0.4.1.post4-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:399e9336c02c6bdbe00f27a05cf183c2bedba8fda455e7b2e23abb7fe58c8736", size = 24853519, upload-time = "2025-09-21T15:33:36.222Z" },
+    { url = "https://files.pythonhosted.org/packages/ff/10/e82ec88687121674e006735cc74f6e8c3c72487cca86cc00dde31502a4e4/pyopenjtalk_plus-0.4.1.post4-cp313-cp313-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:7b8f70474d9f0648358ca2d25dd78a3c76e9164f606dd8e7be836cfc6d7a0aa6", size = 30757768, upload-time = "2025-09-21T15:33:38.776Z" },
+    { url = "https://files.pythonhosted.org/packages/b7/41/b0f39b5e14f7d0079ba07d463343a8b96379cf712e523d656f7a28877d19/pyopenjtalk_plus-0.4.1.post4-cp313-cp313-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:cbc491287c15c017ee0f8772784670d3b9a9cd0efe9f365525411295297ab82d", size = 30839883, upload-time = "2025-09-21T15:33:41.702Z" },
+    { url = "https://files.pythonhosted.org/packages/7a/17/aaed4d3207198d744e723bfd0e847b5695b053253e3d4120cf3083081a21/pyopenjtalk_plus-0.4.1.post4-cp313-cp313-win_amd64.whl", hash = "sha256:983472278f209d7f6d0756b002ddd06e80c1c878b3dbb1bd640f8fa1e174ba11", size = 24758333, upload-time = "2025-09-21T15:33:44.376Z" },
+    { url = "https://files.pythonhosted.org/packages/b9/3f/6de77e6c27f10b6bf3222f0e206bfa986c73ad589e0466a7e03132607e79/pyopenjtalk_plus-0.4.1.post4-cp314-cp314-macosx_10_13_x86_64.whl", hash = "sha256:0d3f9e874e78de34b716427195442bc0d1a886f420cbc0be92aa9b8667063b07", size = 24880964, upload-time = "2025-09-21T15:33:47.472Z" },
+    { url = "https://files.pythonhosted.org/packages/0e/43/0c5a0cde5157af60be28dcd70649afdb38ae439b84654f7b230d62641ffe/pyopenjtalk_plus-0.4.1.post4-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:8542bf3cfbee3dc46eee3db1c50dd5dd730ec7fcce644964a4bc4d379e2bc412", size = 24853966, upload-time = "2025-09-21T15:33:50.182Z" },
+    { url = "https://files.pythonhosted.org/packages/d4/60/30cc3d6947160b988f56680ba607dfdfd9d8301bd7c329795a052099bc96/pyopenjtalk_plus-0.4.1.post4-cp314-cp314-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:6782724d7a0317f5f005c6f6ea1d78402358577afd81ef01b20e8b1482f570b9", size = 30751836, upload-time = "2025-09-21T15:33:53.331Z" },
+    { url = "https://files.pythonhosted.org/packages/ed/ea/7901b1607b2318d022aba791076c72c5e642d3f2faffb2eca2032f105ca0/pyopenjtalk_plus-0.4.1.post4-cp314-cp314-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:92ed77eeaf495bc2eef35ca5cb8349d7e4204c540ba0c7b66c7661603ad819bc", size = 30823701, upload-time = "2025-09-21T15:33:56.089Z" },
+    { url = "https://files.pythonhosted.org/packages/76/6e/db0894730f36ac4f8856f1b1ab2f58b6b9bfc472b834312f4cd776d637ef/pyopenjtalk_plus-0.4.1.post4-cp314-cp314-win_amd64.whl", hash = "sha256:ebe392322f30ef36dfebb1eafb7ca996580b0344bece51e83d69f53c183c1bc1", size = 25456864, upload-time = "2025-09-21T15:33:58.848Z" },
+    { url = "https://files.pythonhosted.org/packages/a8/ad/49bc4a5059779e3cc0ad92efd4348df1268afb401a9f224414cc6157bc68/pyopenjtalk_plus-0.4.1.post4-cp314-cp314t-macosx_10_13_x86_64.whl", hash = "sha256:7de0d8edf12ac5ea292a76a04736a248c52d1550f615c965ce023025c1ca4093", size = 24892641, upload-time = "2025-09-21T15:34:01.589Z" },
+    { url = "https://files.pythonhosted.org/packages/cc/6b/6c3cec2a4f7ef6866624405013d712d69fc6fb2f5c9cb0655f42bd648771/pyopenjtalk_plus-0.4.1.post4-cp314-cp314t-macosx_11_0_arm64.whl", hash = "sha256:3d8c24e615a4ad96b45b08b7e8baba80dcea0f56d064afecd5233cc8d722aa0a", size = 24867415, upload-time = "2025-09-21T15:34:04.902Z" },
+    { url = "https://files.pythonhosted.org/packages/91/09/291bc9bdf12ab2bf5287c366be01e3a0240eb72c8f066114f28ba184a3cf/pyopenjtalk_plus-0.4.1.post4-cp314-cp314t-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:b315f0195eec43bc04db7dd0edc15eea75839ff3eb3f66869f174fd1c061997a", size = 30790153, upload-time = "2025-09-21T15:34:07.515Z" },
+    { url = "https://files.pythonhosted.org/packages/27/8a/8927a5a8c90bde8474ebcd1ef7322afb14b8624ed231e31eaaef6bbecbd1/pyopenjtalk_plus-0.4.1.post4-cp314-cp314t-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:1437e18319c5ec079862381755379785031ac336bee9cae45088ba5f3d99f7f1", size = 30823158, upload-time = "2025-09-21T15:34:10.389Z" },
+    { url = "https://files.pythonhosted.org/packages/15/3e/a6fbdb7f9d64f54c6061a9d0fc7781ce0d6560ed96ceed9dced7b464d9e9/pyopenjtalk_plus-0.4.1.post4-cp314-cp314t-win_amd64.whl", hash = "sha256:7ed14c3b64c99940e19ada3bf76201a4595518b2ade60ece47b13a3bad4faf37", size = 25489595, upload-time = "2025-09-21T15:34:13.016Z" },
+]
+
+[[package]]
 name = "pyparsing"
 version = "3.2.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1627,6 +1671,7 @@ dependencies = [
     { name = "numpy", version = "2.3.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "onnxruntime" },
     { name = "phonemizer" },
+    { name = "pyopenjtalk-plus" },
     { name = "rich" },
     { name = "sounddevice" },
     { name = "soundfile" },
@@ -1646,6 +1691,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.2.6" },
     { name = "onnxruntime", specifier = ">=1.22.1" },
     { name = "phonemizer", specifier = ">=3.3.0" },
+    { name = "pyopenjtalk-plus", specifier = ">=0.4.1" },
     { name = "rich", specifier = ">=13.7.0" },
     { name = "sounddevice", specifier = ">=0.5.0" },
     { name = "soundfile", specifier = ">=0.13.1" },
@@ -1710,6 +1756,40 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ab/10/87e666544a4e0cec7cbdc09f26948994831ae0f8bbc58de3bf53b68285ff/speechbrain-1.0.3.tar.gz", hash = "sha256:fcab3c6e90012cecb1eed40ea235733b550137e73da6bfa2340ba191ec714052", size = 747735, upload-time = "2025-04-07T17:17:06.749Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/58/13/e61f1085aebee17d5fc2df19fcc5177c10379be52578afbecdd615a831c9/speechbrain-1.0.3-py3-none-any.whl", hash = "sha256:9859d4c1b1fb3af3b85523c0c89f52e45a04f305622ed55f31aa32dd2fba19e9", size = 864091, upload-time = "2025-04-07T17:17:04.706Z" },
+]
+
+[[package]]
+name = "sudachidict-core"
+version = "20250825"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "sudachipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/48/cc/36b8f0bd7d0ef78dfa53e8236aa9003dd8b5f64b721ec0cca16466dcb444/sudachidict_core-20250825.tar.gz", hash = "sha256:2f987c06c225c9fbeb7324705ff86ba635c8e9cf1ae5d4994e5df8f14aed78c6", size = 9055, upload-time = "2025-08-29T06:19:51.82Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/06/c3/85a157f2774cf84c85dcdcad45f035b7c0336e4b116c0eef4c962056c4f8/sudachidict_core-20250825-py3-none-any.whl", hash = "sha256:9ec36a79cc6e9aa70f74205c5877a44c397a578c6eb08e55a6023ee637d9d879", size = 72153624, upload-time = "2025-08-29T06:21:24.384Z" },
+]
+
+[[package]]
+name = "sudachipy"
+version = "0.6.10"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/86/eb/ceadfb1e9178332839a75b91393765b135ab870fad9230d47c201c931607/sudachipy-0.6.10.tar.gz", hash = "sha256:b8910a4610de98b2c3cb6dc3362fea93e3ba5059f1eb445a68baa9585278f31b", size = 71518686, upload-time = "2025-01-10T07:15:22.811Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/00/c4/c22937058c8b830beaa48f360b967630e1920ff45e63cb4905a2818779f1/SudachiPy-0.6.10-cp310-cp310-macosx_10_12_universal2.whl", hash = "sha256:418899c5794ec8fd86341d690bdd23bb85f35890540520624a001c751bcfdff0", size = 3050414, upload-time = "2025-01-10T07:14:35.95Z" },
+    { url = "https://files.pythonhosted.org/packages/fb/07/9a349412daedef0d7fd4516a99d5676beba06007c373fec77fb631ad8c6d/SudachiPy-0.6.10-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:99aeaf4a7bbf4c473929f5a9812226123dac1457fb0d549c5e95192eda3f0859", size = 1732723, upload-time = "2025-01-10T07:14:38.982Z" },
+    { url = "https://files.pythonhosted.org/packages/7d/99/2696d9a052267a57180c7992ae9ead9d15f60e8c90cf792a9c4ff66ea7f0/SudachiPy-0.6.10-cp310-cp310-win_amd64.whl", hash = "sha256:efd9c7584ed6dadf9f7d2f4ea616d06207b0d8a805861f9762072733b611b0db", size = 1378164, upload-time = "2025-01-10T07:14:41.648Z" },
+    { url = "https://files.pythonhosted.org/packages/8a/2e/3694b72d52ee6d3c0a55d88f84ea34536acfb6c49a089c346fee83a2f8ef/SudachiPy-0.6.10-cp311-cp311-macosx_10_12_universal2.whl", hash = "sha256:e947d907542c8086b7e6d18669f45599b3964eec4e954ad7dd85e4acdaa94793", size = 3050763, upload-time = "2025-01-10T07:14:43.471Z" },
+    { url = "https://files.pythonhosted.org/packages/e7/df/d5d4792456441d28232655aa2494bded6942257c17d61f161af23bb6ee1b/SudachiPy-0.6.10-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:5e1c1d8c579cc3af591a6511bffba9f88662eedf5ba32868ca8e3ba3c1051d60", size = 1732671, upload-time = "2025-01-10T07:14:46.123Z" },
+    { url = "https://files.pythonhosted.org/packages/79/34/ace16ae26b067ae1a0d69e4294c18203f903739f73e6655c555be51a7884/SudachiPy-0.6.10-cp311-cp311-win_amd64.whl", hash = "sha256:8af8b3c91a9aaf0f300901967f85805d73e83297da6c56db50002dde3a4514fe", size = 1378217, upload-time = "2025-01-10T07:14:48.746Z" },
+    { url = "https://files.pythonhosted.org/packages/3d/82/3d330442ab967417440a3875654698b7091a24a2f0f50fe777461f168356/SudachiPy-0.6.10-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:efb43fb3b46696ca4510b7dd4c3e490de8dbb7950d7172140dc27a4e69cd5811", size = 3041078, upload-time = "2025-01-10T07:14:51.455Z" },
+    { url = "https://files.pythonhosted.org/packages/ad/30/93bf06bec9db46bef29e57bebb94db10a4726a8563bdaba6c9e086f067cd/SudachiPy-0.6.10-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:0f8fd0ce37961401c9bdd78c126b2119a0a1669d376feb0b2427c35894ef1428", size = 1731213, upload-time = "2025-01-10T07:14:54.146Z" },
+    { url = "https://files.pythonhosted.org/packages/7f/6f/8155e6dd268a582fc3b8db3caa3e83589bdf68d9b0a9f67a78436055206d/SudachiPy-0.6.10-cp312-cp312-win_amd64.whl", hash = "sha256:4a79b92b0776613481481c1ed0d2e92994b233ed5d29aa365789a1ba521de0a4", size = 1379214, upload-time = "2025-01-10T07:14:55.776Z" },
+    { url = "https://files.pythonhosted.org/packages/f1/20/c58e1dde2b5413c68cc570f96e31c2ed1bc0b7b19b4eb67533dfaadbd94c/SudachiPy-0.6.10-cp313-cp313-macosx_10_13_universal2.whl", hash = "sha256:cc97b5d48f46f9989d97e105f7dd6419da2174888fcc42e55c0e4cd46597ed3b", size = 3040385, upload-time = "2025-01-10T07:14:58.575Z" },
+    { url = "https://files.pythonhosted.org/packages/58/f4/3451dbe8fa54a7b23285512db018c622e10d649a94f134f9fc92292eb4a4/SudachiPy-0.6.10-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:9794b73fffd8099d93e07882ba87eee5edbed0e4f1b94761db8f22c8e5da9904", size = 1730957, upload-time = "2025-01-10T07:15:01.296Z" },
+    { url = "https://files.pythonhosted.org/packages/47/d3/e3cbab0b5d84df3c9d46e18fa07b84e2ab0b317daafb2bcd01610895106d/SudachiPy-0.6.10-cp313-cp313-win_amd64.whl", hash = "sha256:0fc5b60920a439c534688237e2651e15e4eaadc166a63182d6e24ac7ef3e4779", size = 1378958, upload-time = "2025-01-10T07:15:03.877Z" },
+    { url = "https://files.pythonhosted.org/packages/9b/da/279d12cab13f2affa9edd0ad4d5631573f4de07a020ad89a4ad0195f1d7c/SudachiPy-0.6.10-cp313-cp313t-macosx_10_13_universal2.whl", hash = "sha256:7455e5cbb4c2cf9294c82345c9d46b344774b4eb23eca917f305ed716d8d5168", size = 3033253, upload-time = "2025-01-10T07:15:06.674Z" },
+    { url = "https://files.pythonhosted.org/packages/66/ed/36eabf79eb81c38d477b77a5ab8fd62c8a4814a82c845f079f0c3b78ff18/SudachiPy-0.6.10-cp313-cp313t-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:38d0de9e840ac8d199e714a40506792ea5237d0db0c966da16d51fbc74a508d6", size = 1730534, upload-time = "2025-01-10T07:15:09.348Z" },
 ]
 
 [[package]]
