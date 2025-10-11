@@ -15,8 +15,10 @@ except ImportError:
     _PYOPENJTALK_AVAILABLE = False
     logging.warning("pyopenjtalk-plus not installed. Japanese phonemization will not be available.")
 
-# Language setting - can be changed to "ja" for Japanese
-LANGUAGE = "en"
+# Language setting
+# Options: "en" (English only), "ja" (Japanese only), "multilingual" (both)
+# Default: "multilingual" for flexible model that supports both languages
+LANGUAGE = "multilingual"
 
 # English phonemes (existing)
 _punct = ';:,.!?¡¿—…"«»"" '
@@ -48,19 +50,34 @@ _phonemes_ja = [
 ]
 
 def _build_phoneme_mappings(language="en"):
-    """Build phoneme mappings based on language"""
-    if language == "ja":
-        _syms = []
-        _seen = set()
-        # Add Japanese phonemes
+    """Build phoneme mappings based on language
+
+    For multilingual support, creates a unified vocabulary containing both
+    English and Japanese phonemes (~250 tokens total).
+    """
+    _syms = []
+    _seen = set()
+
+    if language == "multilingual":
+        # Multilingual: Combine English and Japanese phonemes
+        # Add English phonemes first
+        for ch in _punct + _letters + _letters_ipa:
+            if ch not in _seen:
+                _seen.add(ch)
+                _syms.append(ch)
+        # Add Japanese phonemes (skip duplicates)
+        for ch in _phonemes_ja:
+            if ch not in _seen:
+                _seen.add(ch)
+                _syms.append(ch)
+    elif language == "ja":
+        # Japanese only
         for ch in _phonemes_ja:
             if ch not in _seen:
                 _seen.add(ch)
                 _syms.append(ch)
     else:
-        # English phonemes (original logic)
-        _syms = []
-        _seen = set()
+        # English only
         for ch in _punct + _letters + _letters_ipa:
             if ch not in _seen:
                 _seen.add(ch)
@@ -112,12 +129,33 @@ def _phonemize_ja(text: str) -> str:
     return phonemized
 
 
-def _phonemize(text: str) -> str:
-    """Phonemize text based on the current language setting"""
-    if LANGUAGE == "ja":
+def _phonemize(text: str, force_language: str = None) -> str:
+    """Phonemize text based on the current language setting
+
+    Args:
+        text: Text to phonemize
+        force_language: Override language detection ("en" or "ja")
+
+    Returns:
+        Phonemized text
+    """
+    # Determine which language to use
+    lang = force_language if force_language else LANGUAGE
+
+    # For multilingual mode, auto-detect language (simple heuristic)
+    if lang == "multilingual":
+        # Check if text contains Japanese characters
+        has_japanese = any('\u3040' <= c <= '\u309F' or  # Hiragana
+                         '\u30A0' <= c <= '\u30FF' or  # Katakana
+                         '\u4E00' <= c <= '\u9FFF'     # Kanji
+                         for c in text)
+        lang = "ja" if has_japanese else "en"
+
+    # Phonemize based on detected/selected language
+    if lang == "ja":
         return _phonemize_ja(text)
     else:
-        # English phonemization (original logic)
+        # English phonemization
         text = normalizer.normalize(text)
         es = _get_espeak_backend()
         phonemized = " ".join(_tok.findall(es.phonemize([text])[0]))
@@ -128,14 +166,14 @@ def set_language(language: str):
     """Set the language for phonemization
 
     Args:
-        language: "en" for English, "ja" for Japanese
+        language: "en" (English), "ja" (Japanese), or "multilingual" (both)
     """
     global LANGUAGE, p2idx, idx2p, phoneme_len, phonemes, _syms
 
-    if language not in ["en", "ja"]:
-        raise ValueError(f"Unsupported language: {language}. Use 'en' or 'ja'.")
+    if language not in ["en", "ja", "multilingual"]:
+        raise ValueError(f"Unsupported language: {language}. Use 'en', 'ja', or 'multilingual'.")
 
-    if language == "ja" and not _PYOPENJTALK_AVAILABLE:
+    if language in ["ja", "multilingual"] and not _PYOPENJTALK_AVAILABLE:
         raise RuntimeError("pyopenjtalk-plus is not installed. Please install it to use Japanese phonemization.")
 
     LANGUAGE = language
@@ -144,9 +182,27 @@ def set_language(language: str):
     logging.info(f"Language set to: {language}, phoneme_len: {phoneme_len}")
 
 
-def get_token_ids(text: str):
-    s = _phonemize(text)
-    if LANGUAGE == "ja":
+def get_token_ids(text: str, force_language: str = None):
+    """Convert text to phoneme token IDs
+
+    Args:
+        text: Text to convert
+        force_language: Override language detection ("en" or "ja")
+
+    Returns:
+        List of token IDs
+    """
+    s = _phonemize(text, force_language)
+
+    # Determine language for tokenization
+    lang = force_language if force_language else LANGUAGE
+    if lang == "multilingual":
+        # Auto-detect based on text content
+        has_japanese = any('\u3040' <= c <= '\u309F' or '\u30A0' <= c <= '\u30FF' or '\u4E00' <= c <= '\u9FFF'
+                         for c in text)
+        lang = "ja" if has_japanese else "en"
+
+    if lang == "ja":
         # Japanese phonemes are space-separated
         phoneme_list = s.split()
         return [p2idx[p] for p in phoneme_list if p in p2idx]
@@ -155,8 +211,21 @@ def get_token_ids(text: str):
         return [p2idx[c] for c in s if c in p2idx]
 
 
-def decode_token_ids(token_ids):
-    if LANGUAGE == "ja":
+def decode_token_ids(token_ids, is_japanese: bool = None):
+    """Decode phoneme token IDs back to phoneme string
+
+    Args:
+        token_ids: List of token IDs
+        is_japanese: If None, uses current LANGUAGE setting to determine format
+
+    Returns:
+        Phoneme string
+    """
+    if is_japanese is None:
+        # Use current language setting
+        is_japanese = LANGUAGE in ["ja", "multilingual"]
+
+    if is_japanese:
         # Japanese phonemes should be space-separated
         return " ".join(idx2p.get(t, "") for t in token_ids if t in idx2p)
     else:
