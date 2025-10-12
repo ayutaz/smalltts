@@ -21,7 +21,7 @@
 
 **対応OS**:
 - Linux（推奨）
-- Windows（WSL2 + Docker推奨）
+- Windows（GPU対応、Python 3.12.7 + CUDA 12.4）
 - macOS（CPUのみ、非常に遅い）
 
 ### 2. リポジトリのクローン
@@ -32,16 +32,46 @@ cd smalltts
 git checkout japanese-phonemization  # 日本語対応ブランチ
 ```
 
-### 3. 依存関係のインストール
+### 3. Python環境のセットアップ
+
+#### uvのインストール
+
+**Linux/macOS**:
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+**Windows**:
+```powershell
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+#### Python 3.12とCUDA版PyTorchのインストール
 
 ```bash
-# uvがインストールされていない場合
-curl -LsSf https://astral.sh/uv/install.sh | sh
+# Python 3.12.7をインストール
+uv python install 3.12.7
+
+# .python-versionファイルを作成（リポジトリに既に存在）
+echo "3.12.7" > .python-version
 
 # 依存関係のインストール（日本語音素化ライブラリを含む）
-uv pip install -e ".[japanese]"
-# または
-uv pip install pyopenjtalk-plus
+uv sync
+
+# CPU版PyTorchをアンインストールしてCUDA版をインストール
+uv pip uninstall torch torchvision torchaudio
+uv pip install torch==2.6.0+cu124 torchvision==0.21.0+cu124 torchaudio==2.6.0+cu124 --index-url https://download.pytorch.org/whl/cu124
+```
+
+#### 環境確認
+
+```bash
+# PyTorchとCUDAの確認
+uv run --no-sync python -c "import torch; print(f'PyTorch: {torch.__version__}'); print(f'CUDA available: {torch.cuda.is_available()}')"
+
+# 出力例:
+# PyTorch: 2.6.0+cu124
+# CUDA available: True
 ```
 
 ### 4. JVSデータセットの準備
@@ -157,27 +187,19 @@ WEIGHT_DECAY = 1e-2
 
 ### ステップ3: 学習の開始
 
-#### ローカル環境（Single GPU）
+#### Single GPU（推奨）
 
 ```bash
-uv run accelerate launch scripts/train/teacher_japanese.py
-```
-
-#### Docker環境（GPU）
-
-```bash
-# Docker起動
-docker-compose up -d smalltts-gpu
-
-# コンテナ内で学習を実行
-docker-compose exec smalltts-gpu uv run accelerate launch scripts/train/teacher_japanese.py
+uv run --no-sync accelerate launch scripts/train/teacher_japanese.py
 ```
 
 #### Multi-GPU環境
 
 ```bash
-uv run accelerate launch --multi-gpu scripts/train/teacher_japanese.py
+uv run --no-sync accelerate launch --multi-gpu scripts/train/teacher_japanese.py
 ```
+
+**重要**: `--no-sync`オプションは必須です。これにより、実行時にCPU版PyTorchが再インストールされるのを防ぎます。
 
 ### ステップ4: 訓練の監視
 
@@ -526,11 +548,11 @@ uv run python scripts/export/export_onnx.py \
 
 **学習開始コマンド**:
 ```bash
-# Docker環境（推奨）
-docker-compose exec smalltts-gpu uv run accelerate launch scripts/train/teacher_japanese.py
+# Single GPU
+uv run --no-sync accelerate launch scripts/train/teacher_japanese.py
 
-# ローカル環境
-uv run accelerate launch scripts/train/teacher_japanese.py
+# Multi-GPU
+uv run --no-sync accelerate launch --multi-gpu scripts/train/teacher_japanese.py
 ```
 
 質問や問題がある場合は、GitHubのIssuesで報告してください。

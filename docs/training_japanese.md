@@ -97,18 +97,15 @@ WARMUP_STEPS = 1_000    # ウォームアップステップ数
 
 #### Single GPU:
 ```bash
-uv run accelerate launch scripts/train/teacher_japanese.py
+uv run --no-sync accelerate launch scripts/train/teacher_japanese.py
 ```
 
 #### Multi-GPU:
 ```bash
-uv run accelerate launch --multi-gpu scripts/train/teacher_japanese.py
+uv run --no-sync accelerate launch --multi-gpu scripts/train/teacher_japanese.py
 ```
 
-#### Docker環境:
-```bash
-docker-compose run --rm smalltts uv run accelerate launch scripts/train/teacher_japanese.py
-```
+**注意**: `--no-sync`オプションは必須です。これにより、CPU版PyTorchの再インストールを防ぎます。
 
 ### Step 4: 訓練の監視
 
