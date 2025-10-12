@@ -169,9 +169,9 @@ class JVSDataset(Dataset):
         # Convert to latents if encoder is provided
         if self.codec_encoder is not None:
             with torch.no_grad():
-                # Add batch dimension: [T] -> [1, T]
-                waveform_batch = waveform.unsqueeze(0)
-                latents = self.codec_encoder(waveform_batch)  # [1, T', 64]
+                # Add batch and channel dimensions: [T] -> [1, 1, T]
+                waveform_batch = waveform.unsqueeze(0).unsqueeze(0)
+                latents = self.codec_encoder.encode(waveform_batch)  # [1, T', 64]
                 latents = latents.squeeze(0)  # [T', 64]
         else:
             # Return raw waveform if no encoder provided

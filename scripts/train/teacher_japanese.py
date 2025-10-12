@@ -36,7 +36,7 @@ from smalltts.data.phonemization.phonemes import set_language, phoneme_len
 from smalltts.models.backbone.model import Backbone
 from smalltts.models.utils import adapt_state_dict_for_expanded_phonemes
 from smalltts.train.utils import get_alpha_sigma, get_mask, get_random_cond
-from smalltts.codec.onnx import VibeVoiceEncoder
+from smalltts.codec.onnx import Encoder
 
 # ============================================================================
 # CONFIGURATION
@@ -47,9 +47,9 @@ AUDIO_DIR = "data/jvs_ver1/jvs001/parallel100/wav24kHz16bit"
 TRANSCRIPT_FILE = "data/jvs_ver1/jvs001/parallel100/transcripts_utf8.txt"
 
 # Training parameters
-BATCH_SIZE = 2
-NUM_WORKERS = 0
-NUM_STEPS = 50_000  # Fewer steps for fine-tuning
+BATCH_SIZE = 1
+NUM_WORKERS = 4
+NUM_STEPS = 1_000  # Proof of concept: verify Japanese pronunciation
 NUM_SAVE_STEPS = 1_000
 
 # Checkpoint paths
@@ -130,7 +130,7 @@ if __name__ == "__main__":
 
     # Initialize codec encoder
     print("\n[2/6] Loading VibeVoice encoder")
-    encoder = VibeVoiceEncoder()
+    encoder = Encoder()
 
     # Initialize dataloader
     print("\n[3/6] Loading JVS dataset")
@@ -228,7 +228,12 @@ if __name__ == "__main__":
     pbar = tqdm(range(0, NUM_STEPS), desc="Fine-tuning", disable=not accelerator.is_main_process)
 
     for step in pbar:
-        batch = next(train)
+        try:
+            batch = next(train)
+        except StopIteration:
+            # Reset iterator when dataset is exhausted
+            train = iter(train_loader)
+            batch = next(train)
 
         phonemes = batch["phonemes"].to(accelerator.device)
         phonemes_lengths = batch["phonemes_lengths"].to(accelerator.device)

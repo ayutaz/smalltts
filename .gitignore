@@ -5,3 +5,6 @@ assets/*
 .DS_Store
 .cursorrules
 out
+data/jvs_ver1/*
+.claude/
+check_memory.ps1

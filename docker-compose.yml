@@ -21,6 +21,9 @@ services:
     volumes:
       - ./assets:/app/assets
       - ./out:/app/out
+      - ./scripts:/app/scripts
+      - ./src:/app/src
+      - ./data:/app/data
     deploy:
       resources:
         reservations:
