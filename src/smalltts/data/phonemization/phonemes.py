@@ -60,13 +60,13 @@ def _build_phoneme_mappings(language="en"):
 
     if language == "multilingual":
         # Multilingual: Combine English and Japanese phonemes
-        # Add English phonemes first
-        for ch in _punct + _letters + _letters_ipa:
+        # IMPORTANT: Add Japanese phonemes first to ensure they get correct IDs (175+)
+        for ch in _phonemes_ja:
             if ch not in _seen:
                 _seen.add(ch)
                 _syms.append(ch)
-        # Add Japanese phonemes (skip duplicates)
-        for ch in _phonemes_ja:
+        # Add English phonemes (skip duplicates)
+        for ch in _punct + _letters + _letters_ipa:
             if ch not in _seen:
                 _seen.add(ch)
                 _syms.append(ch)
