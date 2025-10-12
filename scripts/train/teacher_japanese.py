@@ -149,9 +149,9 @@ if __name__ == "__main__":
         shuffle=True,
     )
 
-    # Initialize accelerator with mixed precision (FP16) for faster training
+    # Initialize accelerator (FP32 - FP16 was tested but slower on this setup)
     print("\n[4/6] Setting up distributed training")
-    accelerator = Accelerator(mixed_precision="fp16")
+    accelerator = Accelerator()
 
     # Initialize model with Japanese vocabulary
     print("\n[5/6] Initializing model")
