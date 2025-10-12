@@ -1,7 +1,7 @@
-"""Fine-tune Teacher model on Japanese JVS dataset
+"""Train Teacher model on Japanese JVS dataset from scratch
 
-This script fine-tunes an existing English Teacher model on Japanese data.
-It automatically expands the phoneme embeddings from 175 tokens (English) to 205 tokens (multilingual).
+This script trains a Japanese Teacher model from scratch using the JVS corpus.
+It uses Japanese-only phoneme vocabulary (205 tokens for multilingual support).
 
 Usage:
     # Single GPU
@@ -11,14 +11,13 @@ Usage:
     uv run accelerate launch --multi-gpu scripts/train/teacher_japanese.py
 
 Requirements:
-    - JVS dataset downloaded and prepared
+    - JVS dataset downloaded and prepared (data/jvs_ver1)
     - VibeVoice encoder checkpoint (auto-downloaded)
-    - English teacher checkpoint (auto-downloaded or specify path)
 
 Configuration:
-    - Set AUDIO_DIR and TRANSCRIPT_FILE to point to your JVS dataset
-    - Set LOAD_FROM_CHECKPOINT to the English checkpoint path
-    - Adjust BATCH_SIZE and NUM_WORKERS for your hardware
+    - JVS_ROOT_DIR: Path to JVS dataset directory
+    - NUM_STEPS: Total training steps (default: 10,000 for testing, 100,000 recommended for production)
+    - BATCH_SIZE and NUM_WORKERS: Adjust for your hardware
 """
 
 from typing import Tuple
@@ -50,16 +49,17 @@ SUBSET = "parallel100"  # JVS subset to use
 # Training parameters
 BATCH_SIZE = 1
 NUM_WORKERS = 0  # Must be 0 when using ONNX encoder (CUDA context issue)
-NUM_STEPS = 100_000  # Training from scratch requires more steps (100 speakers × 100 utterances = 10,000 samples)
-NUM_SAVE_STEPS = 5_000
+NUM_STEPS = 10_000  # Train for 10,000 steps (test on this PC)
+NUM_SAVE_STEPS = 1_000  # Save checkpoint every 1,000 steps
 
 # Checkpoint paths
-LOAD_FROM_CHECKPOINT = None  # Train from scratch (Japanese only)
+LOAD_FROM_CHECKPOINT = None  # Train from scratch (no checkpoint loading)
 OUTPUT_DIR = "assets/teacher_checkpoints_ja"
+RESUME_FROM_STEP = 0  # Starting from step 0
 
 # Training from scratch learning rate
 LEARNING_RATE = 1e-4  # Standard training rate
-WARMUP_STEPS = 1_000  # Warmup for first 10% of training
+WARMUP_STEPS = 1_000  # Warmup for first 10% of training (1,000 < 10,000, so T_max = 9,000)
 WEIGHT_DECAY = 1e-2
 
 # Phoneme vocabulary settings
@@ -115,7 +115,7 @@ def load_and_adapt_checkpoint(checkpoint_path: str, device: str) -> dict:
         initialization="mean",  # Use mean of existing embeddings (better than zeros)
     )
 
-    print("✅ Checkpoint adapted successfully")
+    print("[OK] Checkpoint adapted successfully")
     return adapted_state_dict
 
 
@@ -159,7 +159,7 @@ if __name__ == "__main__":
 
     # Load and adapt checkpoint if specified
     if LOAD_FROM_CHECKPOINT is not None:
-        print("\n[6/6] Loading and adapting English checkpoint")
+        print("\n[6/6] Loading and adapting checkpoint")
         adapted_state_dict = load_and_adapt_checkpoint(
             LOAD_FROM_CHECKPOINT,
             accelerator.device
@@ -169,13 +169,13 @@ if __name__ == "__main__":
         missing_keys, unexpected_keys = model.load_state_dict(adapted_state_dict, strict=False)
 
         if missing_keys:
-            print(f"⚠️  Missing keys: {missing_keys[:5]}{'...' if len(missing_keys) > 5 else ''}")
+            print(f"[WARNING] Missing keys: {missing_keys[:5]}{'...' if len(missing_keys) > 5 else ''}")
         if unexpected_keys:
-            print(f"⚠️  Unexpected keys: {unexpected_keys[:5]}{'...' if len(unexpected_keys) > 5 else ''}")
+            print(f"[WARNING] Unexpected keys: {unexpected_keys[:5]}{'...' if len(unexpected_keys) > 5 else ''}")
 
-        print("✅ Checkpoint loaded successfully")
+        print("[OK] Checkpoint loaded successfully")
     else:
-        print("\n[6/6] Skipping checkpoint loading (training from scratch)")
+        print("\n[6/6] Training from scratch (no checkpoint loading)")
 
     # Setup optimizer with lower learning rate for fine-tuning
     print("\n" + "=" * 80)
@@ -228,7 +228,8 @@ if __name__ == "__main__":
         Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
 
     # Training loop
-    pbar = tqdm(range(0, NUM_STEPS), desc="Training", disable=not accelerator.is_main_process)
+    start_step = RESUME_FROM_STEP if LOAD_FROM_CHECKPOINT is not None else 0
+    pbar = tqdm(range(start_step, NUM_STEPS), desc="Training", disable=not accelerator.is_main_process)
 
     for step in pbar:
         try:
@@ -294,7 +295,7 @@ if __name__ == "__main__":
 
         # Save checkpoint
         if accelerator.is_main_process and step % NUM_SAVE_STEPS == 0 and step > 0:
-            print(f"\n💾 Saving checkpoint at step {step}")
+            print(f"\n[SAVE] Saving checkpoint at step {step}")
 
             # Save full accelerator state (for resuming training)
             checkpoint_dir = f"{OUTPUT_DIR}/checkpoint_step_{step}"
@@ -320,7 +321,7 @@ if __name__ == "__main__":
                 f"{OUTPUT_DIR}/checkpoint_latest.pt",
             )
 
-            print(f"✅ Checkpoint saved to {OUTPUT_DIR}")
+            print(f"[OK] Checkpoint saved to {OUTPUT_DIR}")
 
         # Clean up
         del batch, noised, cond_mask, cond, mask, velocity, true_velocity, loss
@@ -330,7 +331,7 @@ if __name__ == "__main__":
         print("\n" + "=" * 80)
         print("TRAINING COMPLETE")
         print("=" * 80)
-        print(f"💾 Saving final checkpoint")
+        print(f"[SAVE] Saving final checkpoint")
 
         accelerator.save_state(f"{OUTPUT_DIR}/checkpoint_final")
         torch.save(
@@ -341,5 +342,5 @@ if __name__ == "__main__":
             f"{OUTPUT_DIR}/checkpoint_final.pt",
         )
 
-        print(f"✅ Final checkpoint saved to {OUTPUT_DIR}")
+        print(f"[OK] Final checkpoint saved to {OUTPUT_DIR}")
         print("=" * 80)

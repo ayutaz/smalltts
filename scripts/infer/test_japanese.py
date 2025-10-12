@@ -19,8 +19,8 @@ from smalltts.data.phonemization.phonemes import set_language, get_token_ids
 from smalltts.models.backbone.model import Backbone
 from smalltts.codec.onnx import Decoder
 
-# Set multilingual mode
-set_language("multilingual")
+# Set Japanese-only mode (matching training)
+set_language("ja")
 
 # Configuration
 CHECKPOINT_PATH = "assets/teacher_checkpoints_ja/checkpoint_final.pt"
@@ -43,7 +43,7 @@ def load_model(checkpoint_path: str, device: str) -> Backbone:
     model.load_state_dict(state_dict)
     model.eval()
 
-    print(f"✅ Model loaded on {device}")
+    print(f"[OK] Model loaded on {device}")
     return model
 
 
@@ -83,8 +83,9 @@ def generate_speech(
     phoneme_length = phonemes.shape[1]
     phonemes_mask = torch.ones(batch_size, phoneme_length, dtype=torch.bool).to(device)
 
-    # Estimate latent length (rough approximation: 1 phoneme ≈ 2-3 latent frames)
-    latent_length = int(phoneme_length * 2.5)
+    # Estimate latent length (based on JVS data analysis: ~0.8 latent frames per phoneme)
+    # Training data shows: 80 phonemes → 65 frames, 92 phonemes → 68 frames
+    latent_length = int(phoneme_length * 0.8)
 
     # Initialize random latents
     latents = torch.randn(batch_size, latent_length, 64).to(device)
@@ -146,7 +147,9 @@ def generate_speech(
         # DDIM step
         latents = alpha_next * x0 + sigma_next * v
 
-    print(f"✅ Generation complete")
+    print(f"[OK] Generation complete")
+    print(f"Generated latents shape: {latents.shape}")
+    print(f"Latents stats: mean={latents.mean().item():.4f}, std={latents.std().item():.4f}, min={latents.min().item():.4f}, max={latents.max().item():.4f}")
     return latents
 
 
@@ -194,7 +197,7 @@ def main():
     # Load decoder
     print("Loading VibeVoice decoder...")
     decoder = Decoder()
-    print("✅ Decoder loaded\n")
+    print("[OK] Decoder loaded\n")
 
     # Generate latents
     latents = generate_speech(
@@ -221,7 +224,7 @@ def main():
     output_path = output_dir / "japanese_test.wav"
     torchaudio.save(str(output_path), audio, 24000)
 
-    print(f"✅ Audio saved to: {output_path}")
+    print(f"[OK] Audio saved to: {output_path}")
     print(f"   Duration: {audio.shape[1] / 24000:.2f} seconds")
     print("\n" + "=" * 80)
     print("TEST COMPLETE")
