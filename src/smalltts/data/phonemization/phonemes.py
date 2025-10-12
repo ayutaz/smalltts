@@ -60,6 +60,9 @@ def _build_phoneme_mappings():
 p2idx, idx2p, phoneme_len, _syms = _build_phoneme_mappings()
 phonemes: List[str] = _syms
 
+# Suppress all warnings and logging
+import warnings
+warnings.filterwarnings("ignore")
 logging.getLogger().setLevel(logging.CRITICAL)
 
 # Initialize Japanese normalizer

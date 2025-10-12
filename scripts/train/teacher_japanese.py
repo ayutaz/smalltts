@@ -47,7 +47,7 @@ SPEAKER_IDS = None  # None = use all speakers (jvs001-jvs100)
 SUBSET = "parallel100"  # JVS subset to use
 
 # Training parameters
-BATCH_SIZE = 1
+BATCH_SIZE = 2  # Optimal batch size (tested 1, 2, 3, 4 - BATCH_SIZE=2 is fastest at ~7sec/step)
 NUM_WORKERS = 0  # Must be 0 when using ONNX encoder (CUDA context issue)
 NUM_STEPS = 10_000  # Train for 10,000 steps (test on this PC)
 NUM_SAVE_STEPS = 1_000  # Save checkpoint every 1,000 steps
@@ -149,9 +149,9 @@ if __name__ == "__main__":
         shuffle=True,
     )
 
-    # Initialize accelerator
+    # Initialize accelerator with mixed precision (FP16) for faster training
     print("\n[4/6] Setting up distributed training")
-    accelerator = Accelerator()
+    accelerator = Accelerator(mixed_precision="fp16")
 
     # Initialize model with Japanese vocabulary
     print("\n[5/6] Initializing model")

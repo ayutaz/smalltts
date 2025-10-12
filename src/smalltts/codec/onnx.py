@@ -21,7 +21,14 @@ def _default_providers() -> list[str]:
 class _ONNXRunner:
     def __init__(self, path: str, providers: Optional[Iterable[str]] = None) -> None:
         prov = list(providers) if providers is not None else _default_providers()
-        self.sess = ort.InferenceSession(path, providers=prov)
+
+        # Optimize ONNX session for faster inference
+        sess_options = ort.SessionOptions()
+        sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        sess_options.intra_op_num_threads = 4  # Limit threads for better cache utilization
+        sess_options.inter_op_num_threads = 1  # Single inter-op thread
+
+        self.sess = ort.InferenceSession(path, sess_options=sess_options, providers=prov)
         self.in_name = self.sess.get_inputs()[0].name
         self.out_name = self.sess.get_outputs()[0].name
 

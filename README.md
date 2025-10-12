@@ -162,44 +162,45 @@ from-scratch training order, in `scripts/train`:
 - we have tested [webdataset](https://github.com/webdataset/webdataset)
 - checkpoints on huggingface make fine‑tuning easy
 
-### japanese fine-tuning
+### japanese training
 
-smalltts supports **multilingual phonemes** (205 tokens: english ~175 + japanese ~64) with automatic language detection.
+smalltts supports **japanese-only phonemes** (64 tokens) with pyopenjtalk-plus for text-to-phoneme conversion.
 
 **quick start**:
 ```bash
-# 1. expand checkpoint for multilingual support (175→205 tokens)
-python scripts/utils/expand_checkpoint.py \
-  --input assets/teacher_checkpoints/checkpoint_latest.pt \
-  --output assets/teacher_checkpoints/checkpoint_multilingual.pt \
-  --old-vocab-size 175 \
-  --new-vocab-size 205
+# 1. setup python 3.12.7 + cuda (see guide)
+uv python install 3.12.7
+uv sync
+uv pip uninstall torch torchvision torchaudio
+uv pip install torch==2.6.0+cu124 torchvision==0.21.0+cu124 torchaudio==2.6.0+cu124 --index-url https://download.pytorch.org/whl/cu124
 
-# 2. fine-tune on JVS dataset (configure paths in script)
-uv run accelerate launch scripts/train/teacher_japanese.py
+# 2. download JVS dataset (100 speakers, ~10,000 samples)
+# download from: https://sites.google.com/site/shinnosuketakamichi/research-topics/jvs_corpus
+# extract to: data/jvs_ver1/
+
+# 3. train from scratch with all 100 JVS speakers
+uv run --no-sync accelerate launch scripts/train/teacher_japanese.py
 ```
 
 **features**:
-- automatic phoneme embedding expansion
-- JVS (Japanese Versatile Speech corpus) dataloader included
-- fine-tuning optimized parameters (lr: 1e-5, 50k steps)
-- preserves english knowledge while learning japanese
+- japanese-only phoneme vocabulary (64 tokens)
+- JVS (Japanese Versatile Speech corpus) dataloader with multi-speaker support
+- training from scratch (no english dependency)
+- optimized for RTX 4070 Ti SUPER 16GB (batch_size=1, ~10 sec/step)
 
 **details**:
-- Full fine-tuning guide: `docs/training_japanese.md`
-- Training from scratch with all 100 JVS speakers: `docs/jvs_training_guide_ja.md` (日本語)
+- Full training guide: `docs/japanese_training_guide.md` (日本語)
+- Training time: ~3 hours for 10k steps, ~28 hours for 100k steps (single GPU)
 
 **usage example**:
 ```python
-from smalltts import SmallTTS
-from smalltts.data.phonemization.phonemes import set_language
+from smalltts.data.phonemization.phonemes import set_language, get_token_ids
 
-# multilingual mode (auto language detection)
-set_language("multilingual")
+# japanese-only mode
+set_language("ja")
 
-tts = SmallTTS()
-# japanese text - automatically detected
-# english text - automatically detected
+# phonemize japanese text
+tokens = get_token_ids("こんにちは、世界！")
 ```
 
 ## inference

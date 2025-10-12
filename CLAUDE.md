@@ -53,10 +53,9 @@
 ### データ (src/smalltts/data/)
 
 - **dummy.py**: ダミーデータローダー（訓練には実データに置き換える必要あり）
-- **japanese.py**: JVS (Japanese Versatile Speech corpus) データローダー
+- **japanese.py**: JVS (Japanese Versatile Speech corpus) データローダー（マルチスピーカー対応）
 - **phonemization/**: テキスト正規化と音素トークン化
-  - **phonemes.py**: 多言語音素化システム（英語・日本語対応）
-  - **normalizer.py**: 英語テキスト正規化
+  - **phonemes.py**: 日本語専用音素化システム（64トークン、pyopenjtalk-plus使用）
   - **normalizer_ja.py**: 日本語テキスト正規化
 
 ## 訓練パイプライン
@@ -188,39 +187,23 @@ uv pip install "git+https://github.com/smallbraineng/smalltts"
 
 ## 日本語対応
 
-SmallTTSは多言語音素語彙（205トークン）により、英語と日本語の両方をサポートします。
+SmallTTSは日本語専用音素語彙（64トークン）により、日本語音声合成をサポートします。
 
 ### 音素化システム
 
-**多言語モード（デフォルト）**:
-- 英語音素（~175トークン）+ 日本語音素（~64トークン）= 205トークン
-- 自動言語検出（Unicode範囲による判定）
+**日本語専用モード**:
+- 日本語音素のみ（64トークン）
 - pyopenjtalk-plusによる日本語音素化
-- espeak-ngによる英語音素化
+- 英語・espeak-ng依存を完全に削除
 
 ```python
 from smalltts.data.phonemization.phonemes import set_language, get_token_ids
 
-# 多言語モード（デフォルト、自動言語検出）
-set_language("multilingual")
-
-# 日本語テキスト - 自動検出
-tokens_ja = get_token_ids("こんにちは、世界！")
-
-# 英語テキスト - 自動検出
-tokens_en = get_token_ids("Hello, world!")
-```
-
-**言語モードの切り替え**:
-```python
-# 英語のみ (175トークン)
-set_language("en")
-
-# 日本語のみ (64トークン)
+# 日本語モードに設定
 set_language("ja")
 
-# 多言語 (205トークン) - デフォルト
-set_language("multilingual")
+# 日本語テキストの音素化
+tokens_ja = get_token_ids("こんにちは、世界！")
 ```
 
 ### 日本語データセット
@@ -233,40 +216,32 @@ set_language("multilingual")
 ```python
 from smalltts.data.japanese import get_jvs_dataloader
 
+# 全100話者を使用するマルチスピーカー学習
 loader = get_jvs_dataloader(
-    audio_dir="data/jvs_ver1/jvs001/parallel100/wav24kHz16bit",
-    transcript_file="data/jvs_ver1/jvs001/parallel100/transcripts_utf8.txt",
-    batch_size=16,
-    num_workers=4
+    root_dir="data/jvs_ver1",
+    speaker_ids=None,  # None = 全話者を使用
+    subset="parallel100",
+    batch_size=1,
+    num_workers=0  # ONNX encoder使用時は0必須
 )
 ```
 
-### 日本語ファインチューニング
+### 日本語モデルの学習
 
-既存の英語Teacherモデルを日本語データでファインチューニングできます:
+JVS corpusを使用して、日本語専用TTSモデルを一から学習:
 
-**1. チェックポイントの音素埋め込み拡張**:
 ```bash
-# 既存チェックポイント（175トークン）を多言語（205トークン）に拡張
-python scripts/utils/expand_checkpoint.py \
-  --input assets/teacher_checkpoints/checkpoint_latest.pt \
-  --output assets/teacher_checkpoints/checkpoint_multilingual.pt \
-  --old-vocab-size 175 \
-  --new-vocab-size 205
-```
-
-**2. JVSデータセットでファインチューニング**:
-```bash
-# scripts/train/teacher_japanese.py でデータセットパスを設定後
-uv run accelerate launch scripts/train/teacher_japanese.py
+# Python 3.12.7 + CUDA 12.4のセットアップ後
+uv run --no-sync accelerate launch scripts/train/teacher_japanese.py
 ```
 
 **特徴**:
-- 自動的な音素埋め込み拡張（175→205トークン）
-- ファインチューニング最適化済みパラメータ（学習率: 1e-5）
-- 既存の英語知識を保持しながら日本語を学習
+- 一から学習（training from scratch）
+- 全100話者のマルチスピーカー対応
+- 学習率: 1e-4（標準訓練レート）
+- 推奨ステップ数: 100,000ステップ（約28時間、単一GPU）
 
-**詳細ガイド**: `docs/training_japanese.md`を参照
+**詳細ガイド**: `docs/japanese_training_guide.md`を参照
 
 ## ライセンス
 
