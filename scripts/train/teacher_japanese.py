@@ -42,23 +42,24 @@ from smalltts.codec.onnx import Encoder
 # CONFIGURATION
 # ============================================================================
 
-# Dataset paths (modify these to point to your JVS dataset)
-AUDIO_DIR = "data/jvs_ver1/jvs001/parallel100/wav24kHz16bit"
-TRANSCRIPT_FILE = "data/jvs_ver1/jvs001/parallel100/transcripts_utf8.txt"
+# Dataset paths - Multi-speaker mode (all 100 JVS speakers)
+JVS_ROOT_DIR = "data/jvs_ver1"
+SPEAKER_IDS = None  # None = use all speakers (jvs001-jvs100)
+SUBSET = "parallel100"  # JVS subset to use
 
 # Training parameters
 BATCH_SIZE = 1
-NUM_WORKERS = 4
-NUM_STEPS = 1_000  # Proof of concept: verify Japanese pronunciation
-NUM_SAVE_STEPS = 1_000
+NUM_WORKERS = 0  # Must be 0 when using ONNX encoder (CUDA context issue)
+NUM_STEPS = 100_000  # Training from scratch requires more steps (100 speakers × 100 utterances = 10,000 samples)
+NUM_SAVE_STEPS = 5_000
 
 # Checkpoint paths
-LOAD_FROM_CHECKPOINT = "assets/teacher_checkpoints/checkpoint_latest.pt"
+LOAD_FROM_CHECKPOINT = None  # Train from scratch (Japanese only)
 OUTPUT_DIR = "assets/teacher_checkpoints_ja"
 
-# Fine-tuning learning rate (lower than training from scratch)
-LEARNING_RATE = 1e-5  # 10x lower than original 1e-4
-WARMUP_STEPS = 1_000
+# Training from scratch learning rate
+LEARNING_RATE = 1e-4  # Standard training rate
+WARMUP_STEPS = 1_000  # Warmup for first 10% of training
 WEIGHT_DECAY = 1e-2
 
 # Phoneme vocabulary settings
@@ -111,7 +112,7 @@ def load_and_adapt_checkpoint(checkpoint_path: str, device: str) -> dict:
         old_vocab_size=OLD_VOCAB_SIZE,
         new_vocab_size=NEW_VOCAB_SIZE,
         embedding_key="phoneme_embedding.phoneme_embed.weight",
-        initialization="zeros",
+        initialization="mean",  # Use mean of existing embeddings (better than zeros)
     )
 
     print("✅ Checkpoint adapted successfully")
@@ -120,12 +121,12 @@ def load_and_adapt_checkpoint(checkpoint_path: str, device: str) -> dict:
 
 if __name__ == "__main__":
     print("=" * 80)
-    print("JAPANESE TEACHER MODEL FINE-TUNING")
+    print("JAPANESE TEACHER MODEL TRAINING (FROM SCRATCH)")
     print("=" * 80)
 
-    # Set language to multilingual mode
-    print("\n[1/6] Setting up multilingual phoneme vocabulary")
-    set_language("multilingual")
+    # Set language to Japanese-only mode (train from scratch)
+    print("\n[1/6] Setting up Japanese phoneme vocabulary")
+    set_language("ja")
     print(f"Phoneme vocabulary size: {phoneme_len}")
 
     # Initialize codec encoder
@@ -133,13 +134,15 @@ if __name__ == "__main__":
     encoder = Encoder()
 
     # Initialize dataloader
-    print("\n[3/6] Loading JVS dataset")
-    print(f"Audio directory: {AUDIO_DIR}")
-    print(f"Transcript file: {TRANSCRIPT_FILE}")
+    print("\n[3/6] Loading JVS dataset (multi-speaker)")
+    print(f"JVS root directory: {JVS_ROOT_DIR}")
+    print(f"Speaker IDs: {'All speakers' if SPEAKER_IDS is None else SPEAKER_IDS}")
+    print(f"Subset: {SUBSET}")
 
     train_loader = get_jvs_dataloader(
-        audio_dir=AUDIO_DIR,
-        transcript_file=TRANSCRIPT_FILE,
+        root_dir=JVS_ROOT_DIR,
+        speaker_ids=SPEAKER_IDS,
+        subset=SUBSET,
         codec_encoder=encoder,
         batch_size=BATCH_SIZE,
         num_workers=NUM_WORKERS,
@@ -150,7 +153,7 @@ if __name__ == "__main__":
     print("\n[4/6] Setting up distributed training")
     accelerator = Accelerator()
 
-    # Initialize model with multilingual vocabulary
+    # Initialize model with Japanese vocabulary
     print("\n[5/6] Initializing model")
     model = Backbone(latent_dim=64).to(accelerator.device)
 
@@ -225,7 +228,7 @@ if __name__ == "__main__":
         Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
 
     # Training loop
-    pbar = tqdm(range(0, NUM_STEPS), desc="Fine-tuning", disable=not accelerator.is_main_process)
+    pbar = tqdm(range(0, NUM_STEPS), desc="Training", disable=not accelerator.is_main_process)
 
     for step in pbar:
         try:

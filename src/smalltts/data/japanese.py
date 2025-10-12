@@ -43,9 +43,16 @@ logger = logging.getLogger(__name__)
 class JVSDataset(Dataset):
     """Dataset for JVS (Japanese versatile speech corpus)
 
+    Supports two modes:
+    1. Single speaker: Provide audio_dir + transcript_file
+    2. Multi-speaker: Provide root_dir (and optionally speaker_ids)
+
     Args:
-        audio_dir: Directory containing audio files (e.g., wav24kHz16bit/)
-        transcript_file: Path to transcript file (format: "filename:text" per line)
+        audio_dir: Directory containing audio files for single speaker (e.g., wav24kHz16bit/)
+        transcript_file: Path to transcript file for single speaker (format: "filename:text" per line)
+        root_dir: Root directory containing all JVS speakers (e.g., "data/jvs_ver1")
+        speaker_ids: List of speaker IDs to use (e.g., ["jvs001", "jvs002"]). If None, uses all speakers.
+        subset: JVS subset to use (default: "parallel100")
         codec_encoder: Optional VibeVoice encoder for converting audio to latents
         target_sample_rate: Target sample rate (default: 24000 Hz)
         max_audio_length_sec: Maximum audio length in seconds (default: 30)
@@ -54,30 +61,86 @@ class JVSDataset(Dataset):
 
     def __init__(
         self,
-        audio_dir: str,
-        transcript_file: str,
+        audio_dir: str = None,
+        transcript_file: str = None,
+        root_dir: str = None,
+        speaker_ids: List[str] = None,
+        subset: str = "parallel100",
         codec_encoder=None,
         target_sample_rate: int = 24000,
         max_audio_length_sec: float = 30.0,
         file_extension: str = ".wav",
     ):
         super().__init__()
-        self.audio_dir = Path(audio_dir)
-        self.transcript_file = Path(transcript_file)
         self.codec_encoder = codec_encoder
         self.target_sample_rate = target_sample_rate
         self.max_audio_length_sec = max_audio_length_sec
         self.file_extension = file_extension
 
+        # Determine mode: single speaker or multi-speaker
+        if root_dir is not None:
+            # Multi-speaker mode
+            self.multi_speaker = True
+            self.root_dir = Path(root_dir)
+            self.subset = subset
+            self.speaker_ids = speaker_ids
+        elif audio_dir is not None and transcript_file is not None:
+            # Single speaker mode (backward compatibility)
+            self.multi_speaker = False
+            self.audio_dir = Path(audio_dir)
+            self.transcript_file = Path(transcript_file)
+        else:
+            raise ValueError(
+                "Must provide either (root_dir) for multi-speaker "
+                "or (audio_dir + transcript_file) for single speaker"
+            )
+
         # Load metadata (filename -> text mapping)
         self.metadata = self._load_metadata()
 
-        logger.info(
-            f"Loaded JVS dataset: {len(self.metadata)} samples from {audio_dir}"
-        )
+        if self.multi_speaker:
+            logger.info(
+                f"Loaded JVS dataset: {len(self.metadata)} samples from "
+                f"{len(self._get_speaker_dirs())} speakers in {root_dir}"
+            )
+        else:
+            logger.info(
+                f"Loaded JVS dataset: {len(self.metadata)} samples from {audio_dir}"
+            )
+
+    def _get_speaker_dirs(self) -> List[Path]:
+        """Get list of speaker directories
+
+        Returns:
+            List of Path objects for speaker directories (e.g., [Path("jvs001"), Path("jvs002"), ...])
+        """
+        if not self.multi_speaker:
+            return []
+
+        if self.speaker_ids is not None:
+            # Use specified speaker IDs
+            speaker_dirs = [self.root_dir / speaker_id for speaker_id in self.speaker_ids]
+        else:
+            # Auto-detect all speakers (jvs001, jvs002, ..., jvs100)
+            speaker_dirs = sorted(self.root_dir.glob("jvs*"))
+            # Filter to only directories that look like speaker IDs
+            speaker_dirs = [d for d in speaker_dirs if d.is_dir() and d.name.startswith("jvs")]
+
+        # Verify directories exist
+        valid_dirs = []
+        for speaker_dir in speaker_dirs:
+            if not speaker_dir.exists():
+                logger.warning(f"Speaker directory not found: {speaker_dir}")
+                continue
+            valid_dirs.append(speaker_dir)
+
+        if not valid_dirs:
+            raise ValueError(f"No valid speaker directories found in {self.root_dir}")
+
+        return valid_dirs
 
     def _load_metadata(self) -> List[Tuple[str, str]]:
-        """Load metadata from JVS transcript file
+        """Load metadata from JVS transcript file(s)
 
         JVS format: "filename:text" (colon-separated)
         Also supports alternative formats for compatibility:
@@ -88,6 +151,15 @@ class JVSDataset(Dataset):
         Returns:
             List of (audio_filename, text) tuples
         """
+        if self.multi_speaker:
+            # Multi-speaker mode: Load from multiple speakers
+            return self._load_metadata_multispeaker()
+        else:
+            # Single speaker mode: Load from single transcript file
+            return self._load_metadata_single()
+
+    def _load_metadata_single(self) -> List[Tuple[str, str]]:
+        """Load metadata for single speaker"""
         metadata = []
 
         if not self.transcript_file.exists():
@@ -136,6 +208,68 @@ class JVSDataset(Dataset):
             )
 
         return metadata
+
+    def _load_metadata_multispeaker(self) -> List[Tuple[str, str]]:
+        """Load metadata for multiple speakers"""
+        all_metadata = []
+        speaker_dirs = self._get_speaker_dirs()
+
+        for speaker_dir in speaker_dirs:
+            # Construct paths for this speaker
+            audio_dir = speaker_dir / self.subset / "wav24kHz16bit"
+            transcript_file = speaker_dir / self.subset / "transcripts_utf8.txt"
+
+            if not audio_dir.exists():
+                logger.warning(f"Audio directory not found: {audio_dir}")
+                continue
+
+            if not transcript_file.exists():
+                logger.warning(f"Transcript file not found: {transcript_file}")
+                continue
+
+            # Load this speaker's metadata
+            with open(transcript_file, "r", encoding="utf-8") as f:
+                for line_num, line in enumerate(f, 1):
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+
+                    # Try different separators (JVS uses colon by default)
+                    for separator in [":", "|", "\t", " "]:
+                        if separator in line:
+                            parts = line.split(separator, 1)
+                            if len(parts) == 2:
+                                filename, text = parts
+                                filename = filename.strip()
+                                text = text.strip()
+
+                                # Handle filename with or without extension
+                                if not filename.endswith(self.file_extension):
+                                    filename = filename + self.file_extension
+
+                                audio_path = audio_dir / filename
+
+                                if not audio_path.exists():
+                                    logger.warning(
+                                        f"Audio file not found: {audio_path} (line {line_num})"
+                                    )
+                                    continue
+
+                                all_metadata.append((str(audio_path), text))
+                                break
+                    else:
+                        logger.warning(
+                            f"Could not parse line {line_num} in {transcript_file}: {line[:50]}..."
+                        )
+
+        if not all_metadata:
+            raise ValueError(
+                f"No valid samples found in {self.root_dir}. "
+                f"Please check speaker directories and file format."
+            )
+
+        logger.info(f"Loaded {len(all_metadata)} samples from {len(speaker_dirs)} speakers")
+        return all_metadata
 
     def __len__(self) -> int:
         return len(self.metadata)
@@ -221,8 +355,11 @@ def jvs_collate_fn(batch: List[Dict]) -> Dict:
 
 
 def get_jvs_dataloader(
-    audio_dir: str,
-    transcript_file: str,
+    audio_dir: str = None,
+    transcript_file: str = None,
+    root_dir: str = None,
+    speaker_ids: List[str] = None,
+    subset: str = "parallel100",
     codec_encoder=None,
     batch_size: int = 16,
     num_workers: int = 4,
@@ -233,9 +370,16 @@ def get_jvs_dataloader(
 ) -> DataLoader:
     """Create DataLoader for JVS (Japanese versatile speech corpus)
 
+    Supports two modes:
+    1. Single speaker: Provide audio_dir + transcript_file
+    2. Multi-speaker: Provide root_dir (and optionally speaker_ids)
+
     Args:
-        audio_dir: Directory containing audio files (e.g., wav24kHz16bit/)
-        transcript_file: Path to transcript file (transcripts_utf8.txt)
+        audio_dir: Directory containing audio files for single speaker (e.g., wav24kHz16bit/)
+        transcript_file: Path to transcript file for single speaker (transcripts_utf8.txt)
+        root_dir: Root directory containing all JVS speakers (e.g., "data/jvs_ver1")
+        speaker_ids: List of speaker IDs to use (e.g., ["jvs001", "jvs002"]). If None, uses all speakers.
+        subset: JVS subset to use (default: "parallel100")
         codec_encoder: Optional VibeVoice encoder for converting audio to latents
         batch_size: Batch size
         num_workers: Number of worker processes for data loading
@@ -247,7 +391,7 @@ def get_jvs_dataloader(
     Returns:
         DataLoader instance
 
-    Example:
+    Examples:
         >>> # Load JVS dataset (single speaker)
         >>> loader = get_jvs_dataloader(
         ...     audio_dir="data/jvs_ver1/jvs001/parallel100/wav24kHz16bit",
@@ -256,12 +400,17 @@ def get_jvs_dataloader(
         ...     num_workers=4
         ... )
         >>>
-        >>> # Load with codec encoder for latent conversion
-        >>> from smalltts.codec import VibeVoiceEncoder
-        >>> encoder = VibeVoiceEncoder()
+        >>> # Load all speakers (multi-speaker)
         >>> loader = get_jvs_dataloader(
-        ...     audio_dir="data/jvs_ver1/jvs001/parallel100/wav24kHz16bit",
-        ...     transcript_file="data/jvs_ver1/jvs001/parallel100/transcripts_utf8.txt",
+        ...     root_dir="data/jvs_ver1",
+        ...     codec_encoder=encoder,
+        ...     batch_size=16
+        ... )
+        >>>
+        >>> # Load specific speakers
+        >>> loader = get_jvs_dataloader(
+        ...     root_dir="data/jvs_ver1",
+        ...     speaker_ids=["jvs001", "jvs002", "jvs003"],
         ...     codec_encoder=encoder,
         ...     batch_size=16
         ... )
@@ -269,6 +418,9 @@ def get_jvs_dataloader(
     dataset = JVSDataset(
         audio_dir=audio_dir,
         transcript_file=transcript_file,
+        root_dir=root_dir,
+        speaker_ids=speaker_ids,
+        subset=subset,
         codec_encoder=codec_encoder,
         target_sample_rate=target_sample_rate,
         max_audio_length_sec=max_audio_length_sec,
