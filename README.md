@@ -185,7 +185,9 @@ uv run accelerate launch scripts/train/teacher_japanese.py
 - fine-tuning optimized parameters (lr: 1e-5, 50k steps)
 - preserves english knowledge while learning japanese
 
-**details**: see `docs/training_japanese.md` for full guide
+**details**:
+- Full fine-tuning guide: `docs/training_japanese.md`
+- Training from scratch with all 100 JVS speakers: `docs/jvs_training_guide_ja.md` (日本語)
 
 **usage example**:
 ```python
