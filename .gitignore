@@ -8,3 +8,4 @@ out
 data/jvs_ver1/*
 .claude/
 check_memory.ps1
+data/jvs_ver1_latents/*

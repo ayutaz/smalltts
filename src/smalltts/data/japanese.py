@@ -54,6 +54,7 @@ class JVSDataset(Dataset):
         speaker_ids: List of speaker IDs to use (e.g., ["jvs001", "jvs002"]). If None, uses all speakers.
         subset: JVS subset to use (default: "parallel100")
         codec_encoder: Optional VibeVoice encoder for converting audio to latents
+        cache_dir: Optional directory containing pre-cached latents (e.g., "data/jvs_ver1_latents")
         target_sample_rate: Target sample rate (default: 24000 Hz)
         max_audio_length_sec: Maximum audio length in seconds (default: 30)
         file_extension: Audio file extension (default: ".wav")
@@ -67,12 +68,14 @@ class JVSDataset(Dataset):
         speaker_ids: List[str] = None,
         subset: str = "parallel100",
         codec_encoder=None,
+        cache_dir: str = None,
         target_sample_rate: int = 24000,
         max_audio_length_sec: float = 30.0,
         file_extension: str = ".wav",
     ):
         super().__init__()
         self.codec_encoder = codec_encoder
+        self.cache_dir = Path(cache_dir) if cache_dir is not None else None
         self.target_sample_rate = target_sample_rate
         self.max_audio_length_sec = max_audio_length_sec
         self.file_extension = file_extension
@@ -97,6 +100,17 @@ class JVSDataset(Dataset):
 
         # Load metadata (filename -> text mapping)
         self.metadata = self._load_metadata()
+
+        # Check if using cached latents
+        if self.cache_dir is not None:
+            if not self.cache_dir.exists():
+                logger.warning(
+                    f"Cache directory not found: {self.cache_dir}. "
+                    f"Will fall back to on-the-fly encoding."
+                )
+                self.cache_dir = None
+            else:
+                logger.info(f"Using cached latents from: {self.cache_dir}")
 
         if self.multi_speaker:
             logger.info(
@@ -274,42 +288,93 @@ class JVSDataset(Dataset):
     def __len__(self) -> int:
         return len(self.metadata)
 
+    def _get_cache_path(self, audio_path: str) -> Optional[Path]:
+        """Get cache file path for an audio file
+
+        Args:
+            audio_path: Path to audio file
+
+        Returns:
+            Path to cached latents file, or None if not using cache
+        """
+        if self.cache_dir is None:
+            return None
+
+        # Convert audio path to cache path
+        audio_path_obj = Path(audio_path)
+
+        # Extract speaker ID and filename
+        # Example: data/jvs_ver1/jvs001/parallel100/wav24kHz16bit/VOICEACTRESS100_001.wav
+        # -> data/jvs_ver1_latents/jvs001/parallel100/VOICEACTRESS100_001.pt
+        parts = audio_path_obj.parts
+
+        # Find speaker directory (jvs001, jvs002, etc.)
+        speaker_dir = None
+        for part in parts:
+            if part.startswith("jvs") and len(part) == 6:  # jvsXXX format
+                speaker_dir = part
+                break
+
+        if speaker_dir is None:
+            return None
+
+        # Get filename without extension and convert to .pt
+        filename = audio_path_obj.stem + ".pt"
+
+        # Construct cache path: cache_dir/speaker/subset/subset/filename.pt
+        # Note: The preprocessing script creates a double subset structure
+        cache_path = self.cache_dir / speaker_dir / self.subset / self.subset / filename
+
+        return cache_path if cache_path.exists() else None
+
     def __getitem__(self, idx: int) -> Dict:
         audio_path, text = self.metadata[idx]
 
-        # Load audio
-        waveform, sample_rate = torchaudio.load(audio_path)
+        # Try to load from cache first
+        cache_path = self._get_cache_path(audio_path)
+        if cache_path is not None:
+            # Load cached latents
+            try:
+                latents = torch.load(cache_path)  # [T', 64]
+            except Exception as e:
+                logger.warning(f"Failed to load cached latents from {cache_path}: {e}. Falling back to on-the-fly encoding.")
+                cache_path = None
 
-        # Convert to mono if stereo
-        if waveform.shape[0] > 1:
-            waveform = waveform.mean(dim=0, keepdim=True)
+        # Fall back to on-the-fly encoding if cache not available
+        if cache_path is None:
+            # Load audio
+            waveform, sample_rate = torchaudio.load(audio_path)
 
-        # Resample if necessary
-        if sample_rate != self.target_sample_rate:
-            resampler = torchaudio.transforms.Resample(
-                sample_rate, self.target_sample_rate
-            )
-            waveform = resampler(waveform)
+            # Convert to mono if stereo
+            if waveform.shape[0] > 1:
+                waveform = waveform.mean(dim=0, keepdim=True)
 
-        # Trim if too long
-        max_samples = int(self.max_audio_length_sec * self.target_sample_rate)
-        if waveform.shape[1] > max_samples:
-            waveform = waveform[:, :max_samples]
-            logger.debug(f"Trimmed audio {audio_path} to {self.max_audio_length_sec}s")
+            # Resample if necessary
+            if sample_rate != self.target_sample_rate:
+                resampler = torchaudio.transforms.Resample(
+                    sample_rate, self.target_sample_rate
+                )
+                waveform = resampler(waveform)
 
-        # Remove channel dimension: [1, T] -> [T]
-        waveform = waveform.squeeze(0)
+            # Trim if too long
+            max_samples = int(self.max_audio_length_sec * self.target_sample_rate)
+            if waveform.shape[1] > max_samples:
+                waveform = waveform[:, :max_samples]
+                logger.debug(f"Trimmed audio {audio_path} to {self.max_audio_length_sec}s")
 
-        # Convert to latents if encoder is provided
-        if self.codec_encoder is not None:
-            with torch.no_grad():
-                # Add batch and channel dimensions: [T] -> [1, 1, T]
-                waveform_batch = waveform.unsqueeze(0).unsqueeze(0)
-                latents = self.codec_encoder.encode(waveform_batch)  # [1, T', 64]
-                latents = latents.squeeze(0)  # [T', 64]
-        else:
-            # Return raw waveform if no encoder provided
-            latents = waveform.unsqueeze(-1)  # [T, 1] for compatibility
+            # Remove channel dimension: [1, T] -> [T]
+            waveform = waveform.squeeze(0)
+
+            # Convert to latents if encoder is provided
+            if self.codec_encoder is not None:
+                with torch.no_grad():
+                    # Add batch and channel dimensions: [T] -> [1, 1, T]
+                    waveform_batch = waveform.unsqueeze(0).unsqueeze(0)
+                    latents = self.codec_encoder.encode(waveform_batch)  # [1, T', 64]
+                    latents = latents.squeeze(0)  # [T', 64]
+            else:
+                # Return raw waveform if no encoder provided
+                latents = waveform.unsqueeze(-1)  # [T, 1] for compatibility
 
         # Get phoneme token IDs (auto-detects Japanese)
         phoneme_tokens = torch.tensor(get_token_ids(text), dtype=torch.int64)
@@ -361,6 +426,7 @@ def get_jvs_dataloader(
     speaker_ids: List[str] = None,
     subset: str = "parallel100",
     codec_encoder=None,
+    cache_dir: str = None,
     batch_size: int = 16,
     num_workers: int = 4,
     shuffle: bool = True,
@@ -381,6 +447,7 @@ def get_jvs_dataloader(
         speaker_ids: List of speaker IDs to use (e.g., ["jvs001", "jvs002"]). If None, uses all speakers.
         subset: JVS subset to use (default: "parallel100")
         codec_encoder: Optional VibeVoice encoder for converting audio to latents
+        cache_dir: Optional directory containing pre-cached latents (e.g., "data/jvs_ver1_latents")
         batch_size: Batch size
         num_workers: Number of worker processes for data loading
         shuffle: Whether to shuffle the dataset
@@ -422,6 +489,7 @@ def get_jvs_dataloader(
         speaker_ids=speaker_ids,
         subset=subset,
         codec_encoder=codec_encoder,
+        cache_dir=cache_dir,
         target_sample_rate=target_sample_rate,
         max_audio_length_sec=max_audio_length_sec,
     )

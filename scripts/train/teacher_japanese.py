@@ -43,12 +43,13 @@ from smalltts.codec.onnx import Encoder
 
 # Dataset paths - Multi-speaker mode (all 100 JVS speakers)
 JVS_ROOT_DIR = "data/jvs_ver1"
+JVS_CACHE_DIR = "data/jvs_ver1_latents"  # Pre-cached latents directory
 SPEAKER_IDS = None  # None = use all speakers (jvs001-jvs100)
 SUBSET = "parallel100"  # JVS subset to use
 
 # Training parameters
-BATCH_SIZE = 2  # Optimal batch size (tested 1, 2, 3, 4 - BATCH_SIZE=2 is fastest at ~7sec/step)
-NUM_WORKERS = 0  # Must be 0 when using ONNX encoder (CUDA context issue)
+BATCH_SIZE = 6  # Increased for better GPU utilization with cached latents (VRAM: 9.2GB -> ~15GB)
+NUM_WORKERS = 4  # Can use multiple workers when loading from cache (no ONNX encoding)
 NUM_STEPS = 10_000  # Train for 10,000 steps (test on this PC)
 NUM_SAVE_STEPS = 1_000  # Save checkpoint every 1,000 steps
 
@@ -129,13 +130,25 @@ if __name__ == "__main__":
     set_language("ja")
     print(f"Phoneme vocabulary size: {phoneme_len}")
 
-    # Initialize codec encoder
-    print("\n[2/6] Loading VibeVoice encoder")
-    encoder = Encoder()
+    # Check if cached latents are available
+    print("\n[2/6] Checking for cached latents")
+    from pathlib import Path
+    cache_dir = Path(JVS_CACHE_DIR)
+    use_cache = cache_dir.exists()
+
+    if use_cache:
+        print(f"[OK] Using cached latents from: {JVS_CACHE_DIR}")
+        print("[INFO] Skipping ONNX encoder initialization (using cache)")
+        encoder = None
+    else:
+        print(f"[WARN] Cache directory not found: {JVS_CACHE_DIR}")
+        print("[INFO] Loading VibeVoice encoder for on-the-fly encoding")
+        encoder = Encoder()
 
     # Initialize dataloader
     print("\n[3/6] Loading JVS dataset (multi-speaker)")
     print(f"JVS root directory: {JVS_ROOT_DIR}")
+    print(f"Cache directory: {JVS_CACHE_DIR if use_cache else 'None (on-the-fly encoding)'}")
     print(f"Speaker IDs: {'All speakers' if SPEAKER_IDS is None else SPEAKER_IDS}")
     print(f"Subset: {SUBSET}")
 
@@ -144,6 +157,7 @@ if __name__ == "__main__":
         speaker_ids=SPEAKER_IDS,
         subset=SUBSET,
         codec_encoder=encoder,
+        cache_dir=JVS_CACHE_DIR if use_cache else None,
         batch_size=BATCH_SIZE,
         num_workers=NUM_WORKERS,
         shuffle=True,
@@ -156,6 +170,9 @@ if __name__ == "__main__":
     # Initialize model with Japanese vocabulary
     print("\n[5/6] Initializing model")
     model = Backbone(latent_dim=64).to(accelerator.device)
+
+    # Note: torch.compile() is incompatible with jaxtyping decorators
+    # When using cached latents, data loading is much faster so GPU becomes the bottleneck
 
     # Load and adapt checkpoint if specified
     if LOAD_FROM_CHECKPOINT is not None:
