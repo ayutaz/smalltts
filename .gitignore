@@ -6,6 +6,7 @@ assets/*
 .cursorrules
 out
 data/jvs_ver1/*
+data/jvs_ver1_latents/*
+logs/*
 .claude/
 check_memory.ps1
-data/jvs_ver1_latents/*

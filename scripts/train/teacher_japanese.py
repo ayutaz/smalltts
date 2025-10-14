@@ -48,10 +48,10 @@ SPEAKER_IDS = None  # None = use all speakers (jvs001-jvs100)
 SUBSET = "parallel100"  # JVS subset to use
 
 # Training parameters
-BATCH_SIZE = 60  # Optimized for 85-90% VRAM usage (~14-15GB on RTX 4070 Ti SUPER)
+BATCH_SIZE = 10  # Reduced for gradient accumulation (effective batch size = 10 × 2 = 20)
 NUM_WORKERS = 4  # Can use multiple workers when loading from cache (no ONNX encoding)
-NUM_STEPS = 10_000  # Total training steps (recommended for production)
-NUM_SAVE_STEPS = 1_000  # Save checkpoint every 1,000 steps
+NUM_STEPS = 100_000  # Total training steps (recommended for production)
+NUM_SAVE_STEPS = 5_000  # Save checkpoint every 5,000 steps
 
 # Checkpoint paths
 LOAD_FROM_CHECKPOINT = None  # Train from scratch (no checkpoint loading)
@@ -60,7 +60,7 @@ RESUME_FROM_STEP = 0  # Starting from step 0
 
 # Training from scratch learning rate
 LEARNING_RATE = 1e-4  # Standard training rate
-WARMUP_STEPS = 1_000  # Warmup for first 10% of training (1,000 < 10,000, so T_max = 9,000)
+WARMUP_STEPS = 10_000  # Warmup for first 10% of training (10,000 < 100,000, so T_max = 90,000)
 WEIGHT_DECAY = 1e-2
 
 # Phoneme vocabulary settings
@@ -164,8 +164,9 @@ if __name__ == "__main__":
     )
 
     # Initialize accelerator (FP32 - FP16 was tested but slower on this setup)
+    # gradient_accumulation_steps=2: effective batch size = 10 × 2 = 20
     print("\n[4/6] Setting up distributed training")
-    accelerator = Accelerator()
+    accelerator = Accelerator(gradient_accumulation_steps=2)
 
     # Initialize model with Japanese vocabulary
     print("\n[5/6] Initializing model")
@@ -198,7 +199,9 @@ if __name__ == "__main__":
     print("\n" + "=" * 80)
     print("TRAINING CONFIGURATION")
     print("=" * 80)
-    print(f"Batch size: {BATCH_SIZE}")
+    print(f"Batch size: {BATCH_SIZE} (per GPU)")
+    print(f"Gradient accumulation steps: {accelerator.gradient_accumulation_steps}")
+    print(f"Effective batch size: {BATCH_SIZE * accelerator.gradient_accumulation_steps * accelerator.num_processes}")
     print(f"Learning rate: {LEARNING_RATE}")
     print(f"Weight decay: {WEIGHT_DECAY}")
     print(f"Total steps: {NUM_STEPS:,}")
@@ -249,61 +252,62 @@ if __name__ == "__main__":
     pbar = tqdm(range(start_step, NUM_STEPS), desc="Training", disable=not accelerator.is_main_process)
 
     for step in pbar:
-        try:
-            batch = next(train)
-        except StopIteration:
-            # Reset iterator when dataset is exhausted
-            train = iter(train_loader)
-            batch = next(train)
+        with accelerator.accumulate(model):
+            try:
+                batch = next(train)
+            except StopIteration:
+                # Reset iterator when dataset is exhausted
+                train = iter(train_loader)
+                batch = next(train)
 
-        phonemes = batch["phonemes"].to(accelerator.device)
-        phonemes_lengths = batch["phonemes_lengths"].to(accelerator.device)
-        batch_size = phonemes.shape[0]
-        phonemes_mask = get_mask(
-            batch_size, phonemes.shape[1], phonemes_lengths, accelerator.device
-        )
+            phonemes = batch["phonemes"].to(accelerator.device)
+            phonemes_lengths = batch["phonemes_lengths"].to(accelerator.device)
+            batch_size = phonemes.shape[0]
+            phonemes_mask = get_mask(
+                batch_size, phonemes.shape[1], phonemes_lengths, accelerator.device
+            )
 
-        latent_lengths = batch["latents_lengths"].to(accelerator.device)
+            latent_lengths = batch["latents_lengths"].to(accelerator.device)
 
-        # Classifier-free guidance: 10% probability to drop phoneme conditioning
-        cfg_mask = torch.rand(phonemes.shape[0], device=accelerator.device) < 0.1
-        phonemes[cfg_mask] = 0
-        phonemes_mask[cfg_mask] = False
+            # Classifier-free guidance: 10% probability to drop phoneme conditioning
+            cfg_mask = torch.rand(phonemes.shape[0], device=accelerator.device) < 0.1
+            phonemes[cfg_mask] = 0
+            phonemes_mask[cfg_mask] = False
 
-        latents = batch["latents"].to(accelerator.device)
+            latents = batch["latents"].to(accelerator.device)
 
-        # Sample random timesteps and add noise
-        timesteps = torch.rand(batch_size).to(accelerator.device)
-        noised, true_velocity = get_noised_latents(latents, timesteps)
+            # Sample random timesteps and add noise
+            timesteps = torch.rand(batch_size).to(accelerator.device)
+            noised, true_velocity = get_noised_latents(latents, timesteps)
 
-        # Get random conditioning (partial audio for context)
-        cond, cond_mask = get_random_cond(latents, latent_lengths, accelerator.device)
-        mask = get_mask(
-            batch_size, latents.shape[1], latent_lengths, accelerator.device
-        )
+            # Get random conditioning (partial audio for context)
+            cond, cond_mask = get_random_cond(latents, latent_lengths, accelerator.device)
+            mask = get_mask(
+                batch_size, latents.shape[1], latent_lengths, accelerator.device
+            )
 
-        # Forward pass
-        velocity = model(
-            noised,
-            cond,
-            mask,
-            phonemes,
-            phonemes_mask,
-            timesteps,
-        )
+            # Forward pass
+            velocity = model(
+                noised,
+                cond,
+                mask,
+                phonemes,
+                phonemes_mask,
+                timesteps,
+            )
 
-        # Compute loss only on valid (non-padding, non-conditioning) positions
-        valid = mask.unsqueeze(-1).expand(-1, -1, 64) * ~cond_mask
+            # Compute loss only on valid (non-padding, non-conditioning) positions
+            valid = mask.unsqueeze(-1).expand(-1, -1, 64) * ~cond_mask
 
-        velocity = velocity * valid
-        true_velocity = true_velocity * valid
+            velocity = velocity * valid
+            true_velocity = true_velocity * valid
 
-        # Backpropagation
-        optimizer.zero_grad()
-        loss = mse_loss(velocity, true_velocity, reduction="sum") / valid.sum()
-        accelerator.backward(loss)
-        optimizer.step()
-        scheduler.step()
+            # Backpropagation with gradient accumulation
+            optimizer.zero_grad()
+            loss = mse_loss(velocity, true_velocity, reduction="sum") / valid.sum()
+            accelerator.backward(loss)
+            optimizer.step()
+            scheduler.step()
 
         # Logging
         gathered_loss = accelerator.gather(loss).mean().item()  # type: ignore
