@@ -136,6 +136,90 @@ ls -d data/jvs_ver1/jvs* | wc -l
 
 総サンプル数: 約9,997サンプル（100話者 × 約100発話）
 
+## 潜在表現キャッシュの作成（重要）
+
+学習を高速化するため、JVS音声ファイルを事前にONNXエンコーダーで潜在表現に変換してキャッシュします。
+
+### キャッシュ作成の効果
+
+**キャッシュなし**:
+- BATCH_SIZE=1（ONNX encoderはバッチ処理不可）
+- NUM_WORKERS=0（ONNX encoderはマルチプロセス不可）
+- 速度: 約4秒/ステップ（非常に遅い）
+
+**キャッシュあり**:
+- BATCH_SIZE=60（RTX 4070 Ti SUPER最適化）
+- NUM_WORKERS=4（マルチプロセス可能）
+- 速度: 約0.6秒/ステップ（約7倍高速）
+
+### キャッシュの作成方法
+
+```bash
+# 全100話者のキャッシュを作成（推奨）
+uv run python scripts/preprocess/cache_jvs_latents.py
+
+# 特定の話者のみキャッシュ（テスト用）
+uv run python scripts/preprocess/cache_jvs_latents.py --speakers jvs001 jvs002
+
+# バッチサイズを調整（デフォルト: 16）
+uv run python scripts/preprocess/cache_jvs_latents.py --batch-size 32
+
+# 中断したキャッシュ作成を再開
+uv run python scripts/preprocess/cache_jvs_latents.py --resume
+```
+
+### キャッシュ作成時間
+
+**実測時間** (RTX 4070 Ti SUPER 16GB):
+- 全100話者（約10,000サンプル）: 約4-6時間
+- バッチサイズ16（デフォルト）で長さベースのバッチング使用
+
+### キャッシュの確認
+
+```bash
+# キャッシュディレクトリの確認
+ls -la data/jvs_ver1_latents/
+
+# Windows (PowerShell)
+dir data\jvs_ver1_latents\
+
+# キャッシュサイズ
+du -sh data/jvs_ver1_latents/
+# 出力例: 1.5GB
+```
+
+**キャッシュ構造**:
+```
+data/jvs_ver1_latents/
+  metadata.json              # キャッシュメタデータ
+  jvs001/
+    parallel100/
+      VOICEACTRESS100_001.pt  # 潜在表現テンソル
+      VOICEACTRESS100_002.pt
+      ...
+  jvs002/
+    parallel100/
+      ...
+  ...
+  jvs100/
+```
+
+### トラブルシューティング（キャッシュ作成）
+
+**問題: CUDA out of memory during caching**
+
+```bash
+# バッチサイズを減らす
+uv run python scripts/preprocess/cache_jvs_latents.py --batch-size 8
+```
+
+**問題: 中断してしまった場合**
+
+```bash
+# --resumeオプションで既存キャッシュをスキップ
+uv run python scripts/preprocess/cache_jvs_latents.py --resume
+```
+
 ## 学習の実行
 
 ### 学習前の検証（推奨）
@@ -360,11 +444,21 @@ uv pip install pyopenjtalk-plus
 
 **エラー**: `CUDA failure 3: initialization error`
 
-**原因**: ONNX encoderはマルチプロセスでCUDAコンテキストを共有できません
+**原因**: ONNX encoderをオンザフライで使用する場合、マルチプロセスでCUDAコンテキストを共有できません
 
-**解決策**:
+**解決策1: キャッシュを使用（推奨）**:
+```bash
+# 潜在表現キャッシュを作成
+uv run python scripts/preprocess/cache_jvs_latents.py
+
+# キャッシュ使用時はNUM_WORKERS > 0が可能
+NUM_WORKERS = 4
+```
+
+**解決策2: キャッシュなしの場合**:
 ```python
-NUM_WORKERS = 0  # 必ず0に設定
+NUM_WORKERS = 0  # ONNX encoder使用時は必ず0に設定
+BATCH_SIZE = 1   # ONNX encoderはバッチ処理不可
 ```
 
 ### 問題4: 学習率スケジューラーエラー
@@ -414,11 +508,13 @@ nvidia-smi
 
 ### Q3: ステップ数はどれくらい必要？
 
-**推奨**:
-- テスト/実験: 10,000ステップ（約3時間）
-- 本格的な学習: 50,000-100,000ステップ（約14-28時間）
+**推奨** (RTX 4070 Ti SUPER 16GB、潜在表現キャッシュ使用):
+- テスト/実験: 10,000ステップ（約16時間）
+- 本格的な学習: 50,000-100,000ステップ（約74-147時間 = 3.1-6.1日）
 
 loss値が0.1-0.3に収束するまで学習することを推奨します。
+
+**注意**: より高性能なGPU（A100、H100など）では大幅に高速化されます。
 
 ## ベストプラクティス
 
@@ -431,7 +527,8 @@ loss値が0.1-0.3に収束するまで学習することを推奨します。
 - `LEARNING_RATE = 1e-4`（一から学習用）
 - `NUM_STEPS = 100_000`（全100話者用）
 - `WARMUP_STEPS = 1_000`（総ステップの1%）
-- `BATCH_SIZE = 1`（VRAMの制約）
+- `BATCH_SIZE = 60`（潜在表現キャッシュ使用時、RTX 4070 Ti SUPER最適化）
+- `NUM_WORKERS = 4`（キャッシュ使用時）
 
 ### 3. チェックポイント管理
 - 定期的に音声生成をテスト（loss値だけでなく音質を確認）
@@ -483,21 +580,40 @@ uv run accelerate launch scripts/train/dmd2/distill.py
 - JVS corpus（全100話者、約10,000サンプル）を使用
 - 日本語専用TTSモデルを一から学習
 - マルチスピーカー対応
-- 推定訓練時間: 約28時間（100,000ステップ、単一GPU）
+- 実測訓練時間: 約147時間（6.1日）で100,000ステップ（RTX 4070 Ti SUPER 16GB）
 - 出力: 日本語専用Teacherモデル（128ステップ推論）
 
-**学習開始コマンド**:
+### 完全な学習手順（一から環境構築）
+
 ```bash
-# Single GPU
+# 1. 環境セットアップ
+uv python install 3.12.7
+uv sync
+uv pip uninstall torch torchvision torchaudio
+uv pip install torch==2.6.0+cu124 torchvision==0.21.0+cu124 torchaudio==2.6.0+cu124 --index-url https://download.pytorch.org/whl/cu124
+
+# 2. JVSデータセットのダウンロードと解凍
+# https://sites.google.com/site/shinnosuketakamichi/research-topics/jvs_corpus
+# jvs_ver1.zipをdata/に解凍
+
+# 3. 潜在表現キャッシュの作成（4-6時間）
+uv run python scripts/preprocess/cache_jvs_latents.py
+
+# 4. 学習開始（100,000ステップで約147時間 = 6.1日）
+# scripts/train/teacher_japanese.py でNUM_STEPS=100_000に設定
 uv run --no-sync accelerate launch scripts/train/teacher_japanese.py
 
-# Multi-GPU
-uv run --no-sync accelerate launch --multi-gpu scripts/train/teacher_japanese.py
+# 5. 推論テスト
+uv run python scripts/infer/test_teacher_japanese.py \
+  --checkpoint assets/teacher_checkpoints_ja/checkpoint_final.pt \
+  --reference data/jvs_ver1/jvs001/parallel100/wav24kHz16bit/VOICEACTRESS100_001.wav \
+  --transcription "参照音声の転写" \
+  --text "生成したいテキスト"
 ```
 
 質問や問題がある場合は、GitHubのIssuesで報告してください。
 
 ---
 
-**最終更新**: 2025-10-12
+**最終更新**: 2025-10-14
 **対応バージョン**: SmallTTS v0.1.0+
