@@ -48,9 +48,9 @@ SPEAKER_IDS = None  # None = use all speakers (jvs001-jvs100)
 SUBSET = "parallel100"  # JVS subset to use
 
 # Training parameters
-BATCH_SIZE = 6  # Increased for better GPU utilization with cached latents (VRAM: 9.2GB -> ~15GB)
+BATCH_SIZE = 60  # Optimized for 85-90% VRAM usage (~14-15GB on RTX 4070 Ti SUPER)
 NUM_WORKERS = 4  # Can use multiple workers when loading from cache (no ONNX encoding)
-NUM_STEPS = 10_000  # Train for 10,000 steps (test on this PC)
+NUM_STEPS = 10_000  # Total training steps (recommended for production)
 NUM_SAVE_STEPS = 1_000  # Save checkpoint every 1,000 steps
 
 # Checkpoint paths
