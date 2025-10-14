@@ -186,11 +186,21 @@ uv run --no-sync accelerate launch scripts/train/teacher_japanese.py
 - japanese-only phoneme vocabulary (64 tokens)
 - JVS (Japanese Versatile Speech corpus) dataloader with multi-speaker support
 - training from scratch (no english dependency)
-- optimized for RTX 4070 Ti SUPER 16GB (batch_size=1, ~10 sec/step)
+- optimized for RTX 4070 Ti SUPER 16GB with latent caching (batch_size=60)
+
+**training times** (RTX 4070 Ti SUPER 16GB, measured):
+- 10,000 steps: ~16 hours (completed 2025-10-13)
+- 100,000 steps: ~147 hours (6.1 days, estimated from measured data)
+- Average speed: 1.47 hours per 1,000 steps
+
+**audio quality notes**:
+- 10k step model produces recognizable Japanese phonemes but grainy audio quality
+- 50k-100k steps recommended for usable quality
+- English model trained for 600k steps (reference)
 
 **details**:
 - Full training guide: `docs/japanese_training_guide.md` (日本語)
-- Training time: ~3 hours for 10k steps, ~28 hours for 100k steps (single GPU)
+- Inference script: `scripts/infer/test_teacher_japanese.py`
 
 **usage example**:
 ```python

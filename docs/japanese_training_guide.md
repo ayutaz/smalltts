@@ -20,9 +20,9 @@ SmallTTSは日本語専用の音声合成システムとして、JVS corpusで�
 ### 必要な環境
 
 **推奨スペック**:
-- GPU: VRAM 16GB以上（RTX 4070 Ti SUPER以上推奨）
+- GPU: VRAM 16GB以上（RTX 4070 Ti SUPER 16GB で動作確認済み）
 - RAM: 32GB以上
-- ストレージ: 約10GB（JVSデータセット + チェックポイント）
+- ストレージ: 約10GB（JVSデータセット + チェックポイント + 潜在表現キャッシュ）
 
 **対応OS**:
 - Windows（Python 3.12.7 + CUDA 12.4）
@@ -161,9 +161,10 @@ SPEAKER_IDS = None  # None = use all speakers (jvs001-jvs100)
 SUBSET = "parallel100"
 
 # Training parameters
-BATCH_SIZE = 1
-NUM_WORKERS = 0  # Must be 0 when using ONNX encoder
-NUM_STEPS = 10_000  # Training steps (adjust as needed)
+BATCH_SIZE = 60  # Optimized for RTX 4070 Ti SUPER (~14-15GB VRAM, with latent cache)
+NUM_WORKERS = 4  # Can use multiple workers when using cached latents
+JVS_CACHE_DIR = "data/jvs_ver1_latents"  # Pre-cached latents directory
+NUM_STEPS = 10_000  # Training steps (10k for testing, 100k recommended for production)
 NUM_SAVE_STEPS = 1_000  # Checkpoint save interval
 
 # Checkpoint paths
@@ -177,7 +178,10 @@ WEIGHT_DECAY = 1e-2
 ```
 
 **パラメータ説明**:
-- `NUM_STEPS`: 総学習ステップ数（10,000ステップは約2.5-3時間、100,000ステップは約28時間）
+- `NUM_STEPS`: 総学習ステップ数（10,000ステップは約16時間、100,000ステップは約147時間 = 6.1日）
+- `BATCH_SIZE`: 60（潜在表現キャッシュ使用時、RTX 4070 Ti SUPERで最適）
+- `JVS_CACHE_DIR`: 潜在表現キャッシュのディレクトリ（`scripts/preprocess/cache_jvs_latents.py`で作成）
+- `NUM_WORKERS`: 4（キャッシュ使用時は0より大きい値が可能、ONNX encoder使用時は0必須）
 - `SPEAKER_IDS`: `None`で全100話者を使用
 - `LOAD_FROM_CHECKPOINT`: `None`で一から学習
 - `LEARNING_RATE`: 1e-4（一から学習用の標準値）
@@ -232,9 +236,12 @@ Output directory: assets/teacher_checkpoints_ja
 Training: 100%|████████████| 10000/10000 [2:47:32<00:00, loss=0.234, lr=8.95e-05]
 ```
 
-**推定訓練時間**:
-- 10,000ステップ: 約2.5-3時間（単一GPU、BATCH_SIZE=1）
-- 100,000ステップ: 約28時間（単一GPU、BATCH_SIZE=1）
+**実測訓練時間** (RTX 4070 Ti SUPER 16GB、BATCH_SIZE=60、潜在表現キャッシュ使用):
+- 10,000ステップ: 約16時間（2025-10-13実測）
+- 100,000ステップ: 約147時間（6.1日、実測データから推定）
+- 平均速度: 1.47時間/1,000ステップ
+
+**注意**: より高性能なGPU（A100、H100など）では大幅に高速化されます。ドキュメントの「約28時間」は高性能GPU前提です。
 
 **重要な指標**:
 - `loss`: 速度予測のMSE損失（初期: 0.5-1.0、収束: 0.1-0.3が良好）
@@ -270,7 +277,29 @@ LOAD_FROM_CHECKPOINT = "assets/teacher_checkpoints_ja/checkpoint_step_5000"
 
 ## 推論とテスト
 
-### チェックポイントを使った推論
+### 学習済みモデルでの推論
+
+```bash
+# 日本語教師モデルの推論スクリプト
+uv run python scripts/infer/test_teacher_japanese.py \
+  --checkpoint assets/teacher_checkpoints_ja/checkpoint_final.pt \
+  --reference data/jvs_ver1/jvs001/parallel100/wav24kHz16bit/VOICEACTRESS100_001.wav \
+  --transcription "また、東寺のように、五大明王と呼ばれる、主要な明王の中央に配されることも多い。" \
+  --text "こんにちは、世界。これはテストです。" \
+  --output "out/output.wav" \
+  --steps 128 \
+  --cfg-scale 2.0
+```
+
+**パラメータ**:
+- `--checkpoint`: 学習済みチェックポイント（.ptファイル）
+- `--reference`: 参照音声ファイル（声質のクローニング）
+- `--transcription`: 参照音声の転写テキスト
+- `--text`: 生成したいテキスト
+- `--steps`: DDIMサンプリングステップ数（128推奨、256でより高品質）
+- `--cfg-scale`: Classifier-Free Guidanceスケール（1.0〜3.0、デフォルト2.0推奨）
+
+### Pythonコードでの使用
 
 ```python
 import torch
@@ -284,20 +313,24 @@ set_language("ja")
 model = Backbone(latent_dim=64)
 
 # チェックポイントのロード
-checkpoint = torch.load("assets/teacher_checkpoints_ja/checkpoint_latest.pt")
+checkpoint = torch.load("assets/teacher_checkpoints_ja/checkpoint_final.pt")
 model.load_state_dict(checkpoint["model"])
 model.eval()
 
 print(f"Loaded checkpoint from step {checkpoint['step']}")
-print(f"Final loss: {checkpoint['loss']:.4f}")
+print(f"Final loss: {checkpoint.get('loss', 'N/A')}")
 ```
 
-### 簡易テスト
+### 音質について
 
-```bash
-# 学習中のモデルでテスト推論
-uv run python scripts/infer/test_japanese.py
-```
+**10,000ステップでの音質**:
+- 日本語の発音は認識可能
+- 音質は「ガビガビ」で実用的ではない
+- 全区間で音声生成は可能（DDIMサンプリング修正により解決）
+
+**推奨学習量**:
+- 実用的な音質: 50,000〜100,000ステップ
+- 参考: 英語モデルは600,000ステップで学習されている
 
 ## トラブルシューティング
 

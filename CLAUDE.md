@@ -221,8 +221,10 @@ loader = get_jvs_dataloader(
     root_dir="data/jvs_ver1",
     speaker_ids=None,  # None = 全話者を使用
     subset="parallel100",
-    batch_size=1,
-    num_workers=0  # ONNX encoder使用時は0必須
+    codec_encoder=None,  # 潜在表現キャッシュ使用時はNone
+    cache_dir="data/jvs_ver1_latents",  # 事前キャッシュされた潜在表現
+    batch_size=60,  # RTX 4070 Ti SUPER最適化（キャッシュ使用時）
+    num_workers=4,  # キャッシュ使用時は複数ワーカー可能
 )
 ```
 
@@ -239,9 +241,37 @@ uv run --no-sync accelerate launch scripts/train/teacher_japanese.py
 - 一から学習（training from scratch）
 - 全100話者のマルチスピーカー対応
 - 学習率: 1e-4（標準訓練レート）
-- 推奨ステップ数: 100,000ステップ（約28時間、単一GPU）
+- バッチサイズ: 60（RTX 4070 Ti SUPER最適化、潜在表現キャッシュ使用時）
+- 推奨ステップ数: 100,000ステップ
+
+**実測訓練時間** (RTX 4070 Ti SUPER 16GB):
+- 10,000ステップ: 約16時間（2025-10-13実測）
+- 100,000ステップ: 約147時間（6.1日、実測データから推定）
+- 平均速度: 1.47時間/1,000ステップ
+
+**注意**: より高性能なGPU（A100、H100など）では大幅に高速化されます。
 
 **詳細ガイド**: `docs/japanese_training_guide.md`を参照
+
+### 日本語教師モデルの推論
+
+10,000ステップ訓練後の教師モデルでの推論テスト:
+
+```bash
+uv run python scripts/infer/test_teacher_japanese.py \
+  --checkpoint assets/teacher_checkpoints_ja/checkpoint_final.pt \
+  --reference data/jvs_ver1/jvs001/parallel100/wav24kHz16bit/VOICEACTRESS100_001.wav \
+  --transcription "参照音声の転写テキスト" \
+  --text "生成したいテキスト" \
+  --output "out/output.wav" \
+  --steps 128 \
+  --cfg-scale 2.0
+```
+
+**音質に関する注意**:
+- 10,000ステップ訓練のモデルは日本語の発音を生成できるが、音質は粗い（"ガビガビ"）
+- 実用的な音質には50,000-100,000ステップの訓練が推奨される
+- 英語モデルは600,000ステップ訓練されている（参考）
 
 ## ライセンス
 
