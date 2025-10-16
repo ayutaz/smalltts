@@ -50,22 +50,28 @@ SUBSET = "parallel100"  # JVS subset to use
 # Training parameters
 BATCH_SIZE = 10  # Reduced for gradient accumulation (effective batch size = 10 × 2 = 20)
 NUM_WORKERS = 4  # Can use multiple workers when loading from cache (no ONNX encoding)
-NUM_STEPS = 100_000  # Total training steps (recommended for production)
-NUM_SAVE_STEPS = 5_000  # Save checkpoint every 5,000 steps
+NUM_STEPS = 600_000  # Total training steps (600k to match English model quality)
+NUM_SAVE_STEPS = 50_000  # Save checkpoint every 50,000 steps
 
 # Checkpoint paths
-LOAD_FROM_CHECKPOINT = None  # Train from scratch (no checkpoint loading)
-OUTPUT_DIR = "assets/teacher_checkpoints_ja"
+LOAD_FROM_CHECKPOINT = None  # Training from scratch with accent information
+OUTPUT_DIR = "assets/teacher_checkpoints_ja_accent"  # New directory for accent-enhanced model
 RESUME_FROM_STEP = 0  # Starting from step 0
 
 # Training from scratch learning rate
 LEARNING_RATE = 1e-4  # Standard training rate
-WARMUP_STEPS = 10_000  # Warmup for first 10% of training (10,000 < 100,000, so T_max = 90,000)
+WARMUP_STEPS = 10_000  # Warmup steps (10,000 steps, then cosine annealing for 590,000 steps)
 WEIGHT_DECAY = 1e-2
 
-# Phoneme vocabulary settings
-OLD_VOCAB_SIZE = 175  # English-only
-NEW_VOCAB_SIZE = 205  # Multilingual (English + Japanese)
+# Phoneme vocabulary settings (Japanese-only with comprehensive prosodic information)
+# Vocabulary size: 87 tokens
+#   - 64 base phonemes
+#   - 1 accent nucleus marker (↓)
+#   - 3 phrase boundaries (|, #, [BG])
+#   - 3 pause markers ([P1], [P2], [P3])
+#   - 6 POS tags ([N], [V], [ADJ], [PART], [AUX], [SYM])
+#   - 10 mora count markers ([M1]-[M10])
+VOCAB_SIZE = 87  # Japanese phonemes + comprehensive prosodic markers
 
 # ============================================================================
 # TRAINING FUNCTIONS
@@ -89,46 +95,19 @@ def get_noised_latents(
     return noised, true_velocity
 
 
-def load_and_adapt_checkpoint(checkpoint_path: str, device: str) -> dict:
-    """Load checkpoint and adapt phoneme embeddings for multilingual support
-
-    Args:
-        checkpoint_path: Path to English checkpoint
-        device: Device to load checkpoint on
-
-    Returns:
-        Adapted state dictionary
-    """
-    print(f"Loading checkpoint from: {checkpoint_path}")
-    checkpoint = torch.load(checkpoint_path, map_location=device)
-
-    if isinstance(checkpoint, dict) and "model" in checkpoint:
-        state_dict = checkpoint["model"]
-    else:
-        state_dict = checkpoint
-
-    print(f"Adapting phoneme embeddings: {OLD_VOCAB_SIZE} → {NEW_VOCAB_SIZE} tokens")
-    adapted_state_dict = adapt_state_dict_for_expanded_phonemes(
-        state_dict=state_dict,
-        old_vocab_size=OLD_VOCAB_SIZE,
-        new_vocab_size=NEW_VOCAB_SIZE,
-        embedding_key="phoneme_embedding.phoneme_embed.weight",
-        initialization="mean",  # Use mean of existing embeddings (better than zeros)
-    )
-
-    print("[OK] Checkpoint adapted successfully")
-    return adapted_state_dict
+# Note: load_and_adapt_checkpoint function removed - training from scratch with accent info
 
 
 if __name__ == "__main__":
     print("=" * 80)
-    print("JAPANESE TEACHER MODEL TRAINING (FROM SCRATCH)")
+    print("JAPANESE TEACHER MODEL TRAINING WITH COMPREHENSIVE PROSODIC INFORMATION")
     print("=" * 80)
 
     # Set language to Japanese-only mode (train from scratch)
-    print("\n[1/6] Setting up Japanese phoneme vocabulary")
+    print("\n[1/6] Setting up Japanese phoneme vocabulary with prosodic markers")
     set_language("ja")
     print(f"Phoneme vocabulary size: {phoneme_len}")
+    print("Prosodic features: Accent nucleus, Phrase boundaries, POS tags, Mora counts, Pauses")
 
     # Check if cached latents are available
     print("\n[2/6] Checking for cached latents")
@@ -175,25 +154,11 @@ if __name__ == "__main__":
     # Note: torch.compile() is incompatible with jaxtyping decorators
     # When using cached latents, data loading is much faster so GPU becomes the bottleneck
 
-    # Load and adapt checkpoint if specified
-    if LOAD_FROM_CHECKPOINT is not None:
-        print("\n[6/6] Loading and adapting checkpoint")
-        adapted_state_dict = load_and_adapt_checkpoint(
-            LOAD_FROM_CHECKPOINT,
-            accelerator.device
-        )
-
-        # Load adapted weights
-        missing_keys, unexpected_keys = model.load_state_dict(adapted_state_dict, strict=False)
-
-        if missing_keys:
-            print(f"[WARNING] Missing keys: {missing_keys[:5]}{'...' if len(missing_keys) > 5 else ''}")
-        if unexpected_keys:
-            print(f"[WARNING] Unexpected keys: {unexpected_keys[:5]}{'...' if len(unexpected_keys) > 5 else ''}")
-
-        print("[OK] Checkpoint loaded successfully")
-    else:
-        print("\n[6/6] Training from scratch (no checkpoint loading)")
+    # Training from scratch with comprehensive prosodic information
+    print("\n[6/6] Training from scratch with comprehensive prosodic information")
+    print(f"Phoneme vocabulary size: {phoneme_len} (includes all prosodic markers)")
+    print("Features: Accent, Boundaries, POS, Mora count, Pauses")
+    checkpoint_step = 0
 
     # Setup optimizer with lower learning rate for fine-tuning
     print("\n" + "=" * 80)
@@ -241,14 +206,15 @@ if __name__ == "__main__":
         train_loader, model, scheduler, optimizer
     )
 
+    # Create training iterator
     train = iter(train_loader)
 
     # Create output directory
     if accelerator.is_main_process:
         Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
 
-    # Training loop
-    start_step = RESUME_FROM_STEP if LOAD_FROM_CHECKPOINT is not None else 0
+    # Training loop (starting from step 0 with accent-enhanced phonemization)
+    start_step = 0
     pbar = tqdm(range(start_step, NUM_STEPS), desc="Training", disable=not accelerator.is_main_process)
 
     for step in pbar:

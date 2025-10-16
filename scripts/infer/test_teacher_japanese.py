@@ -109,9 +109,10 @@ def generate_speech(
     phonemes_mask = get_mask(1, max_phoneme_len, phonemes_lengths, device)
 
     # Create FIXED UNNOISED conditioning from reference audio
-    # Use beginning of reference (10-30% of target length)
-    cond_length = min(int(target_length * 0.2), int(reference_latents.shape[1] * 0.5))
-    cond_length = max(1, cond_length)
+    # Use beginning of reference (match training distribution: 0-50% average = 25-40%)
+    # IMPORTANT: Use reference_latents length, NOT target_length
+    cond_length = int(reference_latents.shape[1] * 0.5)  # 50% of reference (max training range)
+    cond_length = max(1, min(cond_length, target_length - 1))  # Ensure valid range
 
     # Create conditioning tensor (UNNOISED, stays fixed throughout sampling)
     cond = torch.zeros(1, target_length, 64, device=device)
