@@ -12,10 +12,48 @@ import torch
 from tqdm import tqdm
 
 from smalltts.codec.onnx import Encoder, Decoder
-from smalltts.data.phonemization.phonemes import set_language, get_token_ids
+from smalltts.data.phonemization.phonemes import set_language, get_token_ids, decode_token_ids
 from smalltts.infer.utils import resample_hq
 from smalltts.models.backbone.model import Backbone
 from smalltts.train.utils import get_alpha_sigma, get_mask
+
+
+def estimate_duration_with_prosody(
+    phoneme_tokens: list,
+    reference_length: int,
+    reference_phoneme_tokens: list,
+) -> int:
+    """Estimate target duration considering all phoneme tokens equally
+
+    Args:
+        phoneme_tokens: Target phoneme token IDs (including prosodic markers)
+        reference_length: Reference audio length in frames (at 75fps)
+        reference_phoneme_tokens: Reference phoneme token IDs (including prosodic markers)
+
+    Returns:
+        Estimated target length in frames
+    """
+    # Simple ratio-based estimation treating all tokens equally
+    # Prosodic markers are already included in the token count
+    if len(reference_phoneme_tokens) > 0:
+        base_duration = int(reference_length * len(phoneme_tokens) / len(reference_phoneme_tokens))
+    else:
+        base_duration = reference_length
+
+    # Apply a slight slowdown factor to match reference speaking rate (4.52 chars/sec)
+    # Current issue: generated speech is too fast (5.5+ chars/sec)
+    # Slowdown factor: ~1.2x (to bring 5.5 -> 4.6 chars/sec)
+    adjusted_duration = int(base_duration * 1.2)
+
+    # Ensure minimum length
+    adjusted_duration = max(10, adjusted_duration)
+
+    print(f"Duration estimation:")
+    print(f"  Token count: {len(phoneme_tokens)} (ref: {len(reference_phoneme_tokens)})")
+    print(f"  Base duration: {base_duration} frames ({base_duration/75:.2f} sec)")
+    print(f"  Adjusted duration (1.2x slowdown): {adjusted_duration} frames ({adjusted_duration/75:.2f} sec)")
+
+    return adjusted_duration
 
 
 def load_teacher_model(checkpoint_path: str, device: str = "cuda") -> Backbone:
@@ -94,11 +132,12 @@ def generate_speech(
     # For voice cloning, we use the reference latents as conditioning
     # and generate latents for the target text
 
-    # Estimate target length based on phoneme ratio
-    target_length = int(reference_latents.shape[1] * len(target_phonemes) / len(reference_phonemes))
-    target_length = max(10, target_length)  # Minimum length
-
-    print(f"Target latent length: {target_length}")
+    # Estimate target length with prosodic marker consideration
+    target_length = estimate_duration_with_prosody(
+        target_phonemes,
+        reference_latents.shape[1],
+        reference_phonemes
+    )
 
     # Create phoneme tensors
     max_phoneme_len = max(len(reference_phonemes), len(target_phonemes))

@@ -50,7 +50,7 @@ SUBSET = "parallel100"  # JVS subset to use
 # Training parameters
 BATCH_SIZE = 10  # Reduced for gradient accumulation (effective batch size = 10 × 2 = 20)
 NUM_WORKERS = 4  # Can use multiple workers when loading from cache (no ONNX encoding)
-NUM_STEPS = 600_000  # Total training steps (600k to match English model quality)
+NUM_STEPS = 300_000  # Total training steps (300k - reduced training time)
 NUM_SAVE_STEPS = 50_000  # Save checkpoint every 50,000 steps
 
 # Checkpoint paths
@@ -60,7 +60,7 @@ RESUME_FROM_STEP = 0  # Starting from step 0
 
 # Training from scratch learning rate
 LEARNING_RATE = 1e-4  # Standard training rate
-WARMUP_STEPS = 10_000  # Warmup steps (10,000 steps, then cosine annealing for 590,000 steps)
+WARMUP_STEPS = 10_000  # Warmup steps (10,000 steps, then cosine annealing for 290,000 steps)
 WEIGHT_DECAY = 1e-2
 
 # Phoneme vocabulary settings (Japanese-only with comprehensive prosodic information)

@@ -286,9 +286,9 @@ def _extract_prosodic_info(text: str) -> dict:
             if mora_pos == current_accent:
                 # Check if next phoneme starts a new mora
                 if i + 1 < len(mora_positions) and mora_positions[i + 1] != mora_pos:
-                    result['accent_nuclei'].append(i + 1)
+                    result['accent_nuclei'].append(i)  # Fixed: append i, not i+1
                 elif i + 1 == len(mora_positions):
-                    result['accent_nuclei'].append(i + 1)
+                    result['accent_nuclei'].append(i)  # Fixed: append i, not i+1
 
     return result
 
