@@ -54,8 +54,8 @@ NUM_STEPS = 300_000  # Total training steps (300k - reduced training time)
 NUM_SAVE_STEPS = 50_000  # Save checkpoint every 50,000 steps
 
 # Checkpoint paths
-LOAD_FROM_CHECKPOINT = None  # Training from scratch with accent information
-OUTPUT_DIR = "assets/teacher_checkpoints_ja_accent"  # New directory for accent-enhanced model
+LOAD_FROM_CHECKPOINT = None  # Training from scratch with corrected accent information
+OUTPUT_DIR = "assets/teacher_checkpoints_ja_accent_corrected"  # Corrected accent nucleus position
 RESUME_FROM_STEP = 0  # Starting from step 0
 
 # Training from scratch learning rate
@@ -64,14 +64,16 @@ WARMUP_STEPS = 10_000  # Warmup steps (10,000 steps, then cosine annealing for 2
 WEIGHT_DECAY = 1e-2
 
 # Phoneme vocabulary settings (Japanese-only with comprehensive prosodic information)
-# Vocabulary size: 87 tokens
+# Vocabulary size: 92 tokens (updated with Style-Bert-VITS2 features)
 #   - 64 base phonemes
 #   - 1 accent nucleus marker (↓)
+#   - 2 pitch markers ([, ])
 #   - 3 phrase boundaries (|, #, [BG])
+#   - 3 sentence boundaries (^, $, ?)
 #   - 3 pause markers ([P1], [P2], [P3])
 #   - 6 POS tags ([N], [V], [ADJ], [PART], [AUX], [SYM])
 #   - 10 mora count markers ([M1]-[M10])
-VOCAB_SIZE = 87  # Japanese phonemes + comprehensive prosodic markers
+VOCAB_SIZE = 92  # Japanese phonemes + comprehensive prosodic markers + Style-Bert-VITS2 features
 
 # ============================================================================
 # TRAINING FUNCTIONS

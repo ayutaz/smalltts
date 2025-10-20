@@ -46,10 +46,19 @@ _phonemes_ja = [
     # Accent marker
     "↓",  # Pitch accent nucleus (downstep position)
 
+    # Pitch markers (from Style-Bert-VITS2)
+    "[",   # Pitch rise (アクセント核前の上昇)
+    "]",   # Pitch fall (アクセント核後の下降)
+
     # Phrase boundaries
     "|",   # Accent phrase boundary (文節境界)
     "#",   # Intonation phrase boundary (イントネーション句境界)
     "[BG]",  # Breath group boundary (呼気段落境界)
+
+    # Sentence boundaries (from Style-Bert-VITS2)
+    "^",   # Sentence start (文頭)
+    "$",   # Sentence end - statement (文末・平叙文)
+    "?",   # Sentence end - question (文末・疑問文)
 
     # Pause duration
     "[P1]",  # Short pause (短いポーズ - 読点)
@@ -114,6 +123,7 @@ def _extract_prosodic_info(text: str) -> dict:
             - pos_tags: Dict mapping phoneme index to POS tag
             - mora_counts: Dict mapping phoneme index (phrase start) to mora count
             - pauses: Dict mapping phoneme index to pause type
+            - is_question: Boolean indicating if the sentence is a question (from E3 field)
     """
     import re
 
@@ -129,10 +139,11 @@ def _extract_prosodic_info(text: str) -> dict:
         'pos_tags': {},  # {index: tag}
         'mora_counts': {},  # {index: count}
         'pauses': {},  # {index: type}
+        'is_question': False,  # E3 field for question detection
     }
 
     # =========================================================================
-    # PASS 1: Scan all labels to find pau/sil positions and types
+    # PASS 1: Scan all labels to find pau/sil positions and types + E3 field
     # =========================================================================
     pause_info = []  # List of (label_index, pause_type)
 
@@ -140,6 +151,18 @@ def _extract_prosodic_info(text: str) -> dict:
         phoneme_match = re.match(r'[^^]+\^([^-]+)-([^+]+)', label)
         if phoneme_match:
             curr_phoneme = phoneme_match.group(2)
+
+            # Extract E3 field from sil/pau for question detection
+            # E3=1 indicates question, E3=0 indicates statement
+            e_match = re.search(r'/E:([^_]+)_([^!]+)!([^_]+)_', label)
+            if e_match:
+                try:
+                    e3 = int(e_match.group(3))
+                    if e3 == 1:
+                        result['is_question'] = True
+                except (ValueError, AttributeError):
+                    pass
+
             if curr_phoneme in ['sil', 'pau']:
                 # Detect pause type from surrounding context
                 # Check next label for punctuation info
@@ -182,6 +205,11 @@ def _extract_prosodic_info(text: str) -> dict:
         # Skip silence/pause markers (will be added later)
         if curr_phoneme in ['sil', 'pau']:
             continue
+
+        # Convert unvoiced vowels (uppercase) to lowercase (Style-Bert-VITS2 approach)
+        # Unvoiced vowels appear as A, I, U, E, O in pyopenjtalk output
+        if curr_phoneme in ['A', 'I', 'U', 'E', 'O']:
+            curr_phoneme = curr_phoneme.lower()
 
         # Extract fields
         mora_match = re.search(r'/A:([^+]+)\+([^+]+)\+([^/]+)/', label)
@@ -293,6 +321,41 @@ def _extract_prosodic_info(text: str) -> dict:
     return result
 
 
+def _process_long_vowels(phonemes: list) -> list:
+    """Process long vowel 'ー' by replacing it with the previous vowel
+
+    This follows Style-Bert-VITS2's approach for handling long vowels.
+
+    Args:
+        phonemes: List of phoneme strings
+
+    Returns:
+        List of phonemes with 'ー' replaced by previous vowel
+    """
+    vowels = ['a', 'i', 'u', 'e', 'o', 'A', 'I', 'U', 'E', 'O']
+    result = []
+
+    for i, phoneme in enumerate(phonemes):
+        if phoneme == 'ー':
+            # Find the previous vowel
+            prev_vowel = None
+            for j in range(i - 1, -1, -1):
+                if phonemes[j] in vowels:
+                    prev_vowel = phonemes[j]
+                    break
+
+            # Replace 'ー' with previous vowel, or keep it if no previous vowel found
+            if prev_vowel:
+                result.append(prev_vowel)
+            else:
+                # No previous vowel found, convert to dash
+                result.append('-')
+        else:
+            result.append(phoneme)
+
+    return result
+
+
 def _phonemize_ja(text: str) -> str:
     """Phonemize Japanese text with comprehensive prosodic information
 
@@ -318,8 +381,14 @@ def _phonemize_ja(text: str) -> str:
     # Extract comprehensive prosodic information
     prosody = _extract_prosodic_info(text)
 
+    # Process long vowels (Style-Bert-VITS2 approach)
+    prosody['phonemes'] = _process_long_vowels(prosody['phonemes'])
+
     # Build output with all prosodic markers
     result = []
+
+    # Insert sentence start marker
+    result.append("^")
 
     for i, phoneme in enumerate(prosody['phonemes']):
         # Insert POS tag and mora count at phrase start
@@ -329,12 +398,17 @@ def _phonemize_ja(text: str) -> str:
                 mora_count = prosody['mora_counts'][i]
                 result.append(f"[M{mora_count}]")
 
+        # Insert pitch rise marker before accent nucleus
+        if i in prosody['accent_nuclei']:
+            result.append("[")
+
         # Insert phoneme
         result.append(phoneme)
 
-        # Insert accent nucleus marker after this phoneme
+        # Insert pitch fall marker and accent nucleus marker after this phoneme
         if i in prosody['accent_nuclei']:
             result.append("↓")
+            result.append("]")
 
         # Insert boundaries after this phoneme
         if i in prosody['accent_phrase_boundaries']:
@@ -349,6 +423,12 @@ def _phonemize_ja(text: str) -> str:
         # Insert pause after this phoneme
         if i in prosody['pauses']:
             result.append(prosody['pauses'][i])
+
+    # Insert sentence end marker (question or statement)
+    if prosody['is_question']:
+        result.append("?")
+    else:
+        result.append("$")
 
     return " ".join(result)
 
