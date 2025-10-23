@@ -20,40 +20,46 @@ from smalltts.train.utils import get_alpha_sigma, get_mask
 
 def estimate_duration_with_prosody(
     phoneme_tokens: list,
-    reference_length: int,
+    reference_audio_duration_sec: float,
     reference_phoneme_tokens: list,
+    codec_fps: float,
 ) -> int:
     """Estimate target duration considering all phoneme tokens equally
 
     Args:
         phoneme_tokens: Target phoneme token IDs (including prosodic markers)
-        reference_length: Reference audio length in frames (at 75fps)
+        reference_audio_duration_sec: Reference audio duration in seconds
         reference_phoneme_tokens: Reference phoneme token IDs (including prosodic markers)
+        codec_fps: Codec frame rate (latent frames per second)
 
     Returns:
-        Estimated target length in frames
+        Estimated target length in latent frames
     """
-    # Simple ratio-based estimation treating all tokens equally
-    # Prosodic markers are already included in the token count
+    # Calculate duration based on phoneme ratio
     if len(reference_phoneme_tokens) > 0:
-        base_duration = int(reference_length * len(phoneme_tokens) / len(reference_phoneme_tokens))
+        base_duration_sec = reference_audio_duration_sec * len(phoneme_tokens) / len(reference_phoneme_tokens)
     else:
-        base_duration = reference_length
+        base_duration_sec = reference_audio_duration_sec
 
     # Apply a slight slowdown factor to match reference speaking rate (4.52 chars/sec)
     # Current issue: generated speech is too fast (5.5+ chars/sec)
     # Slowdown factor: ~1.2x (to bring 5.5 -> 4.6 chars/sec)
-    adjusted_duration = int(base_duration * 1.2)
+    adjusted_duration_sec = base_duration_sec * 1.2
+
+    # Convert to latent frames
+    adjusted_duration_frames = int(adjusted_duration_sec * codec_fps)
 
     # Ensure minimum length
-    adjusted_duration = max(10, adjusted_duration)
+    adjusted_duration_frames = max(10, adjusted_duration_frames)
 
     print(f"Duration estimation:")
     print(f"  Token count: {len(phoneme_tokens)} (ref: {len(reference_phoneme_tokens)})")
-    print(f"  Base duration: {base_duration} frames ({base_duration/75:.2f} sec)")
-    print(f"  Adjusted duration (1.2x slowdown): {adjusted_duration} frames ({adjusted_duration/75:.2f} sec)")
+    print(f"  Reference audio duration: {reference_audio_duration_sec:.2f} sec")
+    print(f"  Codec frame rate: {codec_fps:.2f} fps")
+    print(f"  Base duration: {base_duration_sec:.2f} sec")
+    print(f"  Adjusted duration (1.2x slowdown): {adjusted_duration_sec:.2f} sec = {adjusted_duration_frames} frames")
 
-    return adjusted_duration
+    return adjusted_duration_frames
 
 
 def load_teacher_model(checkpoint_path: str, device: str = "cuda") -> Backbone:
@@ -117,7 +123,11 @@ def generate_speech(
     if reference_latents.ndim == 2:
         reference_latents = reference_latents.unsqueeze(0)  # [1, T, 64]
 
-    print(f"Reference latents shape: {reference_latents.shape} ({reference_latents.shape[1]/75:.2f} sec at 75fps)")
+    # Calculate codec frame rate (fps)
+    reference_audio_duration_sec = x.shape[1] / 24000
+    codec_fps = reference_latents.shape[1] / reference_audio_duration_sec
+
+    print(f"Reference latents shape: {reference_latents.shape} ({reference_audio_duration_sec:.2f} sec, {codec_fps:.2f} fps)")
     print(f"Reference latents - mean: {reference_latents.mean():.4f}, std: {reference_latents.std():.4f}, min/max: {reference_latents.min():.4f}/{reference_latents.max():.4f}")
 
     # Phonemize texts
@@ -135,8 +145,9 @@ def generate_speech(
     # Estimate target length with prosodic marker consideration
     target_length = estimate_duration_with_prosody(
         target_phonemes,
-        reference_latents.shape[1],
-        reference_phonemes
+        reference_audio_duration_sec,
+        reference_phonemes,
+        codec_fps
     )
 
     # Create phoneme tensors
@@ -148,10 +159,10 @@ def generate_speech(
     phonemes_mask = get_mask(1, max_phoneme_len, phonemes_lengths, device)
 
     # Create FIXED UNNOISED conditioning from reference audio
-    # Use beginning of reference (match training distribution: 0-50% average = 25-40%)
-    # IMPORTANT: Use reference_latents length, NOT target_length
-    cond_length = int(reference_latents.shape[1] * 0.5)  # 50% of reference (max training range)
-    cond_length = max(1, min(cond_length, target_length - 1))  # Ensure valid range
+    # Use 30% of TARGET length (matching training distribution: 0-50% of target, avg ~25%)
+    # Training uses get_random_cond() which conditions on 0-50% of TARGET length
+    cond_length = int(target_length * 0.3)  # 30% of target length
+    cond_length = max(1, min(cond_length, reference_latents.shape[1]))  # Clamp to available reference
 
     # Create conditioning tensor (UNNOISED, stays fixed throughout sampling)
     cond = torch.zeros(1, target_length, 64, device=device)
@@ -162,7 +173,7 @@ def generate_speech(
         # Use beginning of reference
         cond[:, :cond_length, :] = reference_latents[:, :cond_length, :]
 
-    print(f"Conditioning length: {cond_length} frames ({cond_length/75:.2f} seconds)")
+    print(f"Conditioning length: {cond_length} frames ({cond_length/codec_fps:.2f} seconds, {cond_length/target_length*100:.1f}% of target)")
 
     # Initialize ALL latents with noise (including conditioning region)
     latents = torch.randn(1, target_length, 64, device=device)
