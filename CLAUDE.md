@@ -55,7 +55,7 @@
 - **dummy.py**: ダミーデータローダー（訓練には実データに置き換える必要あり）
 - **japanese.py**: JVS (Japanese Versatile Speech corpus) データローダー（マルチスピーカー対応）
 - **phonemization/**: テキスト正規化と音素トークン化
-  - **phonemes.py**: 日本語専用音素化システム（64トークン、pyopenjtalk-plus使用）
+  - **phonemes.py**: 日本語専用音素化システム（92トークン語彙、pyopenjtalk-plus使用）
   - **normalizer_ja.py**: 日本語テキスト正規化
 
 ## 訓練パイプライン
@@ -187,12 +187,14 @@ uv pip install "git+https://github.com/smallbraineng/smalltts"
 
 ## 日本語対応
 
-SmallTTSは日本語専用音素語彙（64トークン）により、日本語音声合成をサポートします。
+SmallTTSは日本語専用音素語彙（92トークン）により、日本語音声合成をサポートします。
 
 ### 音素化システム
 
 **日本語専用モード**:
-- 日本語音素のみ（64トークン）
+- 日本語音素: 64トークン（基本音素）
+- 韻律マーカー: 28トークン（アクセント核、句境界、品詞、モーラ数、ポーズ）
+- 合計: 92トークン語彙
 - pyopenjtalk-plusによる日本語音素化
 - 英語・espeak-ng依存を完全に削除
 
@@ -237,17 +239,18 @@ JVS corpusを使用して、日本語専用TTSモデルを一から学習:
 uv run --no-sync accelerate launch scripts/train/teacher_japanese.py
 ```
 
-**特徴**:
+**訓練設定**:
 - 一から学習（training from scratch）
 - 全100話者のマルチスピーカー対応
-- 学習率: 1e-4（標準訓練レート）
-- バッチサイズ: 60（RTX 4070 Ti SUPER最適化、潜在表現キャッシュ使用時）
-- 推奨ステップ数: 100,000ステップ
+- 学習率: 1e-4（10k warmup + cosine annealing）
+- バッチサイズ: 80（10 × 2 gradient accumulation × 4 GPUs）
+- GPU: Tesla T4 × 4（各15GB VRAM）
+- 推奨ステップ数: 600,000ステップ（英語モデルと同等）
 
-**実測訓練時間** (RTX 4070 Ti SUPER 16GB):
-- 10,000ステップ: 約16時間（2025-10-13実測）
-- 100,000ステップ: 約147時間（6.1日、実測データから推定）
-- 平均速度: 1.47時間/1,000ステップ
+**実測訓練時間** (Tesla T4 × 4):
+- 300,000ステップ: 約56時間（2025-10-22実測）
+- 600,000ステップ: 約112時間（4.7日、推定）
+- 平均速度: ~1.6 it/s
 
 **注意**: より高性能なGPU（A100、H100など）では大幅に高速化されます。
 
@@ -255,23 +258,283 @@ uv run --no-sync accelerate launch scripts/train/teacher_japanese.py
 
 ### 日本語教師モデルの推論
 
-10,000ステップ訓練後の教師モデルでの推論テスト:
+300,000ステップ訓練後の教師モデルでの推論:
 
 ```bash
 uv run python scripts/infer/test_teacher_japanese.py \
-  --checkpoint assets/teacher_checkpoints_ja/checkpoint_final.pt \
+  --checkpoint assets/teacher_checkpoints_ja_accent_corrected/checkpoint_final.pt \
   --reference data/jvs_ver1/jvs001/parallel100/wav24kHz16bit/VOICEACTRESS100_001.wav \
   --transcription "参照音声の転写テキスト" \
   --text "生成したいテキスト" \
   --output "out/output.wav" \
   --steps 128 \
-  --cfg-scale 2.0
+  --cfg-scale 3.0
 ```
 
+**推奨パラメータ**:
+- 拡散ステップ数: 128 steps
+- CFG scale: 3.0（最も安定した結果）
+- 条件付け長さ: ターゲット長さの30%
+- Codec FPS: 7.54 fps（実測値）
+
 **音質に関する注意**:
-- 10,000ステップ訓練のモデルは日本語の発音を生成できるが、音質は粗い（"ガビガビ"）
-- 実用的な音質には50,000-100,000ステップの訓練が推奨される
+- 300,000ステップモデルは基本的な日本語発音を生成可能
+- ところどころ発音が不安定（無声母音情報の損失が原因 - 後述）
+- 実用的な音質には600,000ステップの訓練が推奨される
 - 英語モデルは600,000ステップ訓練されている（参考）
+
+---
+
+## 日本語モデル開発の現状と課題（2025-10-23更新）
+
+### 現在のモデル状態
+
+**完了した訓練**:
+- **訓練ステップ**: 300,000 steps（2025-10-22完了）
+- **訓練時間**: 約56時間（Tesla T4 × 4 GPU）
+- **データセット**: JVS corpus（100話者、parallel100サブセット）
+- **チェックポイント**: `assets/teacher_checkpoints_ja_accent_corrected/`
+- **Hugging Face**: [ayousanz/smalltts-ja](https://huggingface.co/ayousanz/smalltts-ja)（アップロード予定）
+
+**現在の能力**:
+- ✅ 日本語の基本的な発音生成が可能
+- ✅ 100話者の音声クローニング対応
+- ✅ アクセント核、句境界、韻律情報を考慮
+- ⚠️ 発音が部分的に不安定（詳細は後述）
+
+---
+
+### 発見・修正された問題
+
+#### 1. アクセント核位置バグ（修正済み）
+
+**発見日**: 2025-10-19
+**修正日**: 2025-10-19
+**状態**: ✅ 修正済み
+
+**問題**:
+```python
+# src/smalltts/data/phonemization/phonemes.py:289-290（修正前）
+if i + 1 < len(mora_positions) and mora_positions[i + 1] != mora_pos:
+    result['accent_nuclei'].append(i + 1)  # ← バグ: i+1ではなくiが正しい
+```
+
+アクセント核マーカー（↓）の位置が1つずれていた。例:
+- 「こんにちは」(ko N ni chi wa): `s ↓`（間違い）→ `a ↓`（正しい）
+- 「世界」(se ka i): `k ↓`（間違い）→ `e ↓`（正しい）
+
+**修正内容**:
+```python
+# 修正後
+if i + 1 < len(mora_positions) and mora_positions[i + 1] != mora_pos:
+    result['accent_nuclei'].append(i)  # i+1 → i
+```
+
+**影響**: 300kステップ訓練は修正後のコードで実施されているため、**この問題は解決済み**。
+
+**詳細**: `docs/accent_nucleus_bug_fix.md`参照
+
+---
+
+#### 2. 推論時の条件付けバグ（修正済み）
+
+**発見日**: 2025-10-22
+**修正日**: 2025-10-22
+**状態**: ✅ 修正済み
+
+**問題1: 時間計算の誤り**
+```python
+# scripts/infer/test_teacher_japanese.py（修正前）
+reference_length = reference_latents.shape[1]  # 65 frames（0.87秒相当）
+# ← 実際の音声は8.62秒なのに、潜在フレーム数を使用していた
+```
+
+**修正**:
+```python
+# 修正後
+reference_audio_duration_sec = x.shape[1] / 24000  # 実際の秒数を計算
+codec_fps = reference_latents.shape[1] / reference_audio_duration_sec  # 7.54 fps
+```
+
+**問題2: 条件付け比率の誤り**
+```python
+# 修正前
+cond_length = int(reference_latents.shape[1] * 0.5)  # 50% of reference
+# ← 短いターゲットで93%以上の条件付けになり、全て参照音声と同じ発音に
+```
+
+**修正**:
+```python
+# 修正後
+cond_length = int(target_length * 0.3)  # 30% of target
+# ← 訓練時の分布（0-50%、平均~25%）と一致
+```
+
+**影響**: 推論スクリプトが修正され、正常に異なるテキストの発音が生成可能に。
+
+**ファイル**: `scripts/infer/test_teacher_japanese.py:161-177, 21-62`
+
+---
+
+#### 3. 無声母音情報の損失（**未修正・重要**）
+
+**発見日**: 2025-10-23
+**状態**: ❌ **未修正（再学習が必要）**
+
+**問題**:
+```python
+# src/smalltts/data/phonemization/phonemes.py:209-212
+if curr_phoneme in ['A', 'I', 'U', 'E', 'O']:
+    curr_phoneme = curr_phoneme.lower()  # ← 無声母音情報を削除
+```
+
+**詳細**:
+- pyopenjtalkは無声母音を大文字（A, I, U, E, O）で出力
+- コードがこれを小文字に変換してしまう
+- 結果: モデルが有声/無声の区別を学習できない
+
+**検証例**:
+```
+テキスト: "です"
+pyopenjtalk: d e s U  （U = 無声）
+処理後: d e s u    （u = 有声）← 情報損失
+```
+
+**影響**:
+- 日本語では「です」「ます」「した」などで母音が無声化する
+- 現在のモデルは全て有声で発音を学習
+- これが**発音不安定の主要因**と推定される
+- 語彙92トークン中、実質64トークンしか使用されていない
+
+**推奨される修正**:
+```python
+# phonemes.py:209-212 を削除（大文字のまま保持）
+# if curr_phoneme in ['A', 'I', 'U', 'E', 'O']:
+#     curr_phoneme = curr_phoneme.lower()  # ← この変換を削除
+```
+
+**重要**: 修正後は**ゼロから再学習が必要**
+- 現在の300kモデルは大文字母音のembeddingが未学習
+- 修正後の音素化では大文字が出現するため、混在すると品質不均一
+- 600kステップまで学習推奨（約112時間、Tesla T4 × 4）
+
+---
+
+### その他の潜在的な問題
+
+#### 4. 品詞（POS）コードのマッピング不足（優先度: 中）
+
+**問題**:
+```python
+# phonemes.py:266-274
+pos_map = {
+    '02': '[N]',    # 名詞
+    '10': '[V]',    # 動詞
+    '20': '[ADJ]',  # 形容詞
+    '24': '[PART]', # 助詞
+    '14': '[AUX]',  # 助動詞
+    '01': '[SYM]',  # 記号
+}
+result['pos_tags'][phoneme_idx] = pos_map.get(pos_code, '[N]')  # デフォルト: [N]
+```
+
+**影響**:
+- 6種類のPOSタグのみマッピング
+- 未知のPOSコードは全て`[N]`（名詞）扱い
+- 副詞、連体詞、接続詞などが誤った品詞タグを持つ可能性
+
+**pyopenjtalk警告**:
+```
+WARNING: convert_pos() in njd2jpcommon.c: 助動詞 非自立 助動詞語幹 * are not appropriate POS.
+```
+→ pyopenjtalk自体が一部の助動詞を適切に処理できていない
+
+#### 5. モーラ数の上限（優先度: 低）
+
+**問題**: `phonemes.py:275`で10モーラに制限
+```python
+result['mora_counts'][phoneme_idx] = min(phrase_len, 10)  # 10で打ち切り
+```
+
+**影響**: 10モーラ超のフレーズの長さ情報が失われる（実用上は稀）
+
+#### 6. 単独長音符のエッジケース（優先度: 低）
+
+**問題**: テキストに単独で'ー'が現れた場合、音素が生成されない
+```python
+入力: "ー"
+出力: "^ $"  （空）
+```
+
+**影響**: 実用上ほとんど発生しない
+
+---
+
+### 今後の推奨アクション
+
+#### 優先度1: 無声母音バグ修正 + 再学習（**強く推奨**）
+
+1. **現在の300kモデルをHugging Faceに保存**
+   - 研究記録として保存
+   - ラベル: "300k steps, voiced vowels only, accent corrected"
+
+2. **音素化コードを修正**
+   ```bash
+   # phonemes.py:209-212 を削除
+   git checkout -b fix-unvoiced-vowels
+   # 修正を実施
+   ```
+
+3. **ゼロから再学習**
+   ```bash
+   uv run --no-sync accelerate launch scripts/train/teacher_japanese.py
+   # 目標: 600,000ステップ（約112時間、Tesla T4 × 4）
+   ```
+
+**期待される効果**:
+- 無声母音（A, I, U, E, O）が適切に学習される
+- 「です」「ます」「した」などの発音が自然に
+- 語彙全92トークンを適切に活用
+- 発音の安定性が大幅に向上
+
+**時間コスト**: 約112時間（Tesla T4 × 4 GPU）
+
+---
+
+#### 優先度2: POSコードマッピングの拡充（オプション）
+
+- 副詞、連体詞、接続詞などのPOSコードを追加
+- より正確な韻律情報の提供
+
+---
+
+#### 優先度3: DMD2蒸留（600k教師モデル完成後）
+
+無声母音修正版の600k教師モデルが完成したら:
+1. DMD2蒸留で128ステップ → 4ステップに削減
+2. リアルタイム生成が可能に
+3. CPU推論対応
+
+---
+
+### 参考リソース
+
+**ドキュメント**:
+- `docs/accent_nucleus_bug_fix.md`: アクセント核バグの詳細
+- `docs/japanese_training_guide.md`: 訓練ガイド
+- `assets/teacher_checkpoints_ja_accent_corrected/README.md`: モデルカード
+
+**主要ファイル**:
+- `src/smalltts/data/phonemization/phonemes.py`: 音素化実装
+- `scripts/train/teacher_japanese.py`: 訓練スクリプト
+- `scripts/infer/test_teacher_japanese.py`: 推論スクリプト
+- `scripts/debug/debug_phonemes.py`: 音素化デバッグツール
+
+**GitHub**: [ayutaz/smalltts/tree/japanese-phonemization](https://github.com/ayutaz/smalltts/tree/japanese-phonemization)
+
+**Hugging Face**: [ayousanz/smalltts-ja](https://huggingface.co/ayousanz/smalltts-ja)（近日公開）
+
+---
 
 ## ライセンス
 
