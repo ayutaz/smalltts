@@ -376,47 +376,61 @@ cond_length = int(target_length * 0.3)  # 30% of target
 
 ---
 
-#### 3. 無声母音情報の損失（**未修正・重要**）
+#### 3. 無声母音情報の損失（**修正済み**）
 
 **発見日**: 2025-10-23
-**状態**: ❌ **未修正（再学習が必要）**
+**修正日**: 2025-10-23
+**状態**: ✅ **修正済み（再学習準備完了）**
 
 **問題**:
 ```python
-# src/smalltts/data/phonemization/phonemes.py:209-212
+# src/smalltts/data/phonemization/phonemes.py:209-212（修正前）
 if curr_phoneme in ['A', 'I', 'U', 'E', 'O']:
     curr_phoneme = curr_phoneme.lower()  # ← 無声母音情報を削除
 ```
 
 **詳細**:
 - pyopenjtalkは無声母音を大文字（A, I, U, E, O）で出力
-- コードがこれを小文字に変換してしまう
-- 結果: モデルが有声/無声の区別を学習できない
+- コードがこれを小文字に変換していた
+- 結果: モデルが有声/無声の区別を学習できなかった
 
 **検証例**:
 ```
 テキスト: "です"
-pyopenjtalk: d e s U  （U = 無声）
-処理後: d e s u    （u = 有声）← 情報損失
+修正前: d e s u    （u = 有声）← 情報損失
+修正後: d e s U  （U = 無声）✓
 ```
 
-**影響**:
+**影響（300kモデル）**:
 - 日本語では「です」「ます」「した」などで母音が無声化する
-- 現在のモデルは全て有声で発音を学習
-- これが**発音不安定の主要因**と推定される
-- 語彙92トークン中、実質64トークンしか使用されていない
+- 300kモデルは全て有声で発音を学習
+- これが**発音不安定の主要因**だった
+- 語彙92トークン中、実質64トークンしか使用されていなかった
 
-**推奨される修正**:
+**修正内容**:
 ```python
 # phonemes.py:209-212 を削除（大文字のまま保持）
-# if curr_phoneme in ['A', 'I', 'U', 'E', 'O']:
-#     curr_phoneme = curr_phoneme.lower()  # ← この変換を削除
+# Note: Unvoiced vowels (A, I, U, E, O) are now preserved as uppercase
+# to maintain voiced/unvoiced distinction for natural Japanese pronunciation
 ```
 
-**重要**: 修正後は**ゼロから再学習が必要**
-- 現在の300kモデルは大文字母音のembeddingが未学習
-- 修正後の音素化では大文字が出現するため、混在すると品質不均一
-- 600kステップまで学習推奨（約112時間、Tesla T4 × 4）
+**修正後の検証結果**:
+```python
+from smalltts.data.phonemization.phonemes import get_token_ids
+# "です" → 'd', 'e', 's', 'U'  ✓ 無声母音が保持される
+# 語彙サイズ: 92トークン（全て使用可能）✓
+```
+
+**次のステップ**: ゼロから600kステップまで再学習
+- ブランチ: `fix-unvoiced-vowels-phonemization`
+- 保存先: `assets/teacher_checkpoints_ja_unvoiced`
+- 推定時間: 約112時間（Tesla T4 × 4）
+
+**期待される効果**:
+- 無声母音（A, I, U, E, O）が適切に学習される
+- 「です」「ます」「した」などの発音が自然に
+- 語彙全92トークンを適切に活用
+- 発音の安定性が大幅に向上
 
 ---
 
@@ -470,34 +484,61 @@ result['mora_counts'][phoneme_idx] = min(phrase_len, 10)  # 10で打ち切り
 
 ---
 
-### 今後の推奨アクション
+### 実行済みアクション
 
-#### 優先度1: 無声母音バグ修正 + 再学習（**強く推奨**）
+#### ✅ 無声母音バグ修正完了（2025-10-23）
 
-1. **現在の300kモデルをHugging Faceに保存**
-   - 研究記録として保存
+**完了したステップ**:
+
+1. ✅ **300kモデルをHugging Faceに保存**
+   - 保存先: [ayousanz/smalltts-ja](https://huggingface.co/ayousanz/smalltts-ja)
    - ラベル: "300k steps, voiced vowels only, accent corrected"
+   - ローカル: `assets/teacher_checkpoints_ja_accent_corrected/`
 
-2. **音素化コードを修正**
-   ```bash
-   # phonemes.py:209-212 を削除
-   git checkout -b fix-unvoiced-vowels
-   # 修正を実施
-   ```
+2. ✅ **音素化コードを修正**
+   - ブランチ作成: `fix-unvoiced-vowels-phonemization`
+   - 修正内容: `phonemes.py:209-212` 削除
+   - コミット: e3d92e8
+   - テスト: 無声母音（A,I,U,E,O）が正しく保持されることを確認
 
-3. **ゼロから再学習**
-   ```bash
-   uv run --no-sync accelerate launch scripts/train/teacher_japanese.py
-   # 目標: 600,000ステップ（約112時間、Tesla T4 × 4）
-   ```
+3. ✅ **訓練設定を更新**
+   - OUTPUT_DIR: `assets/teacher_checkpoints_ja_unvoiced`（300kモデルと分離）
+   - NUM_STEPS: 600,000（英語モデルと同等）
+   - コミット: 3db9739
+
+**現在の状態**: 🔄 **600kステップ訓練の準備完了**
+
+---
+
+### 次のアクション
+
+#### 優先度1: 600kステップ訓練の実行（**準備完了**）
+
+**訓練開始コマンド**:
+```bash
+# ブランチ: fix-unvoiced-vowels-phonemization（現在のブランチ）
+uv run --no-sync accelerate launch scripts/train/teacher_japanese.py
+```
+
+**訓練設定**:
+- ステップ数: 600,000
+- 保存先: `assets/teacher_checkpoints_ja_unvoiced/`
+- チェックポイント: 50kステップごと
+- 推定時間: 約112時間（4.7日、Tesla T4 × 4）
 
 **期待される効果**:
 - 無声母音（A, I, U, E, O）が適切に学習される
 - 「です」「ます」「した」などの発音が自然に
 - 語彙全92トークンを適切に活用
 - 発音の安定性が大幅に向上
+- 300kモデル（有声のみ）との比較検証が可能
 
-**時間コスト**: 約112時間（Tesla T4 × 4 GPU）
+**モデル比較**:
+
+| モデル | ステップ数 | 語彙 | 特徴 | ブランチ | 状態 |
+|--------|-----------|------|------|---------|------|
+| 300k (旧) | 300,000 | 64トークン実使用 | 有声のみ | japanese-phonemization | ✅ 完了・HF公開 |
+| **600k (新)** | **600,000** | **92トークン全使用** | **有声+無声** | **fix-unvoiced-vowels-phonemization** | 🔄 **準備完了** |
 
 ---
 
@@ -505,6 +546,7 @@ result['mora_counts'][phoneme_idx] = min(phrase_len, 10)  # 10で打ち切り
 
 - 副詞、連体詞、接続詞などのPOSコードを追加
 - より正確な韻律情報の提供
+- 600k訓練完了後に検討
 
 ---
 
