@@ -206,10 +206,8 @@ def _extract_prosodic_info(text: str) -> dict:
         if curr_phoneme in ['sil', 'pau']:
             continue
 
-        # Convert unvoiced vowels (uppercase) to lowercase (Style-Bert-VITS2 approach)
-        # Unvoiced vowels appear as A, I, U, E, O in pyopenjtalk output
-        if curr_phoneme in ['A', 'I', 'U', 'E', 'O']:
-            curr_phoneme = curr_phoneme.lower()
+        # Note: Unvoiced vowels (A, I, U, E, O) are now preserved as uppercase
+        # to maintain voiced/unvoiced distinction for natural Japanese pronunciation
 
         # Extract fields
         mora_match = re.search(r'/A:([^+]+)\+([^+]+)\+([^/]+)/', label)
